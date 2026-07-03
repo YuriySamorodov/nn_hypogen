@@ -1,6 +1,15 @@
-fastapi
-uvicorn
-scikit-learn
-joblib
-pandas
-pydantic
+# data2md — зависимости
+# Установка: pip install -r requirements.txt
+
+# Основные
+pandas>=2.0.0
+python-docx>=1.0.0
+pypdf>=4.0.0
+openpyxl>=3.1.0
+tabulate>=0.9.0
+requests>=2.31.0  # для вызова Vision API (ollama, deepseek, vk, yandex)
+
+# Для разработки / удобства (опционально, скрипт работает и без них)
+python-dotenv>=1.0.0
+tqdm>=4.66.0       # прогресс-бар при обработке; без него — просто без прогресс-бара
+xlrd>=2.0.0        # нужен только для чтения старого формата .xls

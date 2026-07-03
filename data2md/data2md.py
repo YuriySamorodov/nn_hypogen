@@ -34,6 +34,10 @@ data2md - конвертер данных любого типа в Markdown дл
     - Пропуск файлов больше --max-file-size-mb с предупреждением.
     - --dry-run: показать, что будет обработано, без записи файлов.
     - --summary-json: сохранить машиночитаемый отчёт о прогоне.
+    - Каждый запуск пишет отдельный лог-файл в logs/ (--log-dir):
+      имя вида YYYYMMDDhhmmss-data2md.log, в начале — саммари прогона,
+      далее по одной строке на файл (дата/время, файл, размер, процессор,
+      результат, текст ошибки).
     - Исходные CLI-флаги полностью сохранены для обратной совместимости.
 
 Использование:
@@ -59,6 +63,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from typing import Callable, Optional
@@ -83,7 +88,7 @@ try:
 except ImportError:
     tqdm = None
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 logger = logging.getLogger("data2md")
 
@@ -190,6 +195,9 @@ class Config:
     cache_path: Optional[Path] = None
     summary_json: Optional[Path] = None
 
+    log_dir: Path = field(default_factory=lambda: Path("logs"))
+    file_log_enabled: bool = True
+
     def should_process(self, filepath: Path) -> bool:
         ext = filepath.suffix.lower()
         ftype = EXT_MAP.get(ext)
@@ -246,6 +254,16 @@ class VisionCache:
                     logger.warning(f"Не удалось сохранить кеш {self.path}: {e}")
 
 
+def _human_size(num_bytes: int) -> str:
+    """Читаемый размер файла: 512 B / 340.5 KB / 1.2 MB / 2.1 GB."""
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
 def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
     with open(path, "rb") as f:
@@ -258,8 +276,12 @@ def _sha256_file(path: Path) -> str:
 # Обработчики форматов
 # ============================================================
 
-def image_to_md(image_path: Path, cfg: Config, cache: VisionCache) -> str:
-    """Изображение -> Markdown-описание через Vision API (с кешированием)."""
+def image_to_md(image_path: Path, cfg: Config, cache: VisionCache) -> tuple:
+    """Изображение -> Markdown-описание через Vision API (с кешированием).
+
+    Возвращает (markdown, метка_процессора), где метка_процессора отражает,
+    что реально сработало: конкретный vision-провайдер, кеш или fallback —
+    это то, что попадает в лог-файл прогона."""
     name = image_path.name
     md = f"# {name}\n\n"
 
@@ -267,32 +289,39 @@ def image_to_md(image_path: Path, cfg: Config, cache: VisionCache) -> str:
     try:
         file_hash = _sha256_file(image_path)
     except OSError as e:
-        return md + f"*Не удалось прочитать файл: {e}*\n"
+        return md + f"*Не удалось прочитать файл: {e}*\n", "vision:error"
 
     cached = cache.get(file_hash, provider, cfg.vision_model)
     if cached is not None:
         logger.debug(f"{name}: описание взято из кеша")
         md += cached
         md += f"\n\n*Источник: {name} (кеш)*\n"
-        return md
+        return md, f"vision:{provider}:cache"
 
     if requests is None:
         description = _image_fallback_description(image_path)
+        processor = "vision:fallback"
     elif provider == "ollama" and _is_ollama_available(cfg.ollama_host):
         description = _ollama_vision_describe(image_path, cfg)
+        processor = f"vision:ollama:{cfg.vision_model}"
     elif provider in HTTP_VISION_PROVIDERS and cfg.vision_keys.get(provider):
         description = _http_vision_describe(image_path, cfg, provider)
+        processor = f"vision:{provider}"
     else:
         description = _image_fallback_description(image_path)
+        processor = "vision:fallback"
 
     md += description
     md += f"\n\n*Источник: {name}*\n"
+
+    if description.startswith("*Ошибка"):
+        processor += ":error"
 
     # Кешируем только настоящие ответы API, не fallback-заглушку и не ошибки.
     if requests is not None and not description.startswith("*Изображение") and not description.startswith("*Ошибка"):
         cache.set(file_hash, provider, cfg.vision_model, description)
 
-    return md
+    return md, processor
 
 
 def _read_excel_all_sheets(path: Path) -> dict:
@@ -569,26 +598,28 @@ def _image_fallback_description(image_path: Path) -> str:
 # ============================================================
 
 HANDLERS: dict = {
-    "tabular": lambda path, cfg, cache: table_to_md(path, cfg),
+    "tabular": lambda path, cfg, cache: (table_to_md(path, cfg), "pandas"),
     "image": lambda path, cfg, cache: image_to_md(path, cfg, cache),
 }
 
 
-def _process_file(filepath: Path, cfg: Config, cache: VisionCache) -> str:
+def _process_file(filepath: Path, cfg: Config, cache: VisionCache) -> tuple:
+    """Обрабатывает файл. Возвращает (markdown, метка_процессора) —
+    метка попадает в лог-файл прогона (см. RunLogger)."""
     ext = filepath.suffix.lower()
 
     if ext == ".docx":
-        return docx_to_md(filepath, cfg)
+        return docx_to_md(filepath, cfg), "python-docx"
     if ext == ".pdf":
-        return pdf_to_md(filepath, cfg)
+        return pdf_to_md(filepath, cfg), "pypdf"
     if ext in (".md", ".txt"):
-        return text_to_md(filepath, cfg)
+        return text_to_md(filepath, cfg), "text-copy"
 
     ftype = EXT_MAP.get(ext, "unknown")
     handler = HANDLERS.get(ftype)
     if handler:
         return handler(filepath, cfg, cache)
-    return f"# {filepath.name}\n\n*Неподдерживаемый формат: {ext}*\n"
+    return f"# {filepath.name}\n\n*Неподдерживаемый формат: {ext}*\n", "unsupported"
 
 
 def _output_path_for(filepath: Path, input_dir: Path, output_dir: Path) -> Path:
@@ -614,6 +645,9 @@ class FileResult:
     path: Path
     ftype: str
     ok: bool
+    processor: str = "-"
+    size_bytes: int = 0
+    timestamp: str = ""
     out_path: Optional[Path] = None
     error: Optional[str] = None
     skipped_reason: Optional[str] = None
@@ -622,26 +656,104 @@ class FileResult:
 def _handle_one(filepath: Path, cfg: Config, cache: VisionCache) -> FileResult:
     ext = filepath.suffix.lower()
     ftype = EXT_MAP.get(ext, "unknown")
+    size_bytes = filepath.stat().st_size
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    size_mb = filepath.stat().st_size / (1024 * 1024)
+    size_mb = size_bytes / (1024 * 1024)
     if size_mb > cfg.max_file_size_mb:
         msg = f"пропущен: {size_mb:.1f} МБ > лимита {cfg.max_file_size_mb} МБ"
         logger.warning(f"{filepath.name}: {msg}")
-        return FileResult(filepath, ftype, ok=False, skipped_reason=msg)
+        return FileResult(filepath, ftype, ok=False, size_bytes=size_bytes,
+                           timestamp=ts, skipped_reason=msg)
 
     if cfg.dry_run:
         logger.info(f"[dry-run] {filepath} ({ftype})")
-        return FileResult(filepath, ftype, ok=True)
+        return FileResult(filepath, ftype, ok=True, processor="dry-run",
+                           size_bytes=size_bytes, timestamp=ts)
 
     try:
-        md_content = _process_file(filepath, cfg, cache)
+        md_content, processor = _process_file(filepath, cfg, cache)
         out_path = _output_path_for(filepath, cfg.input_dir, cfg.output_dir)
         out_path.write_text(md_content, encoding="utf-8")
         logger.debug(f"{filepath.name} -> {out_path.name}")
-        return FileResult(filepath, ftype, ok=True, out_path=out_path)
+        return FileResult(filepath, ftype, ok=True, processor=processor,
+                           size_bytes=size_bytes, timestamp=ts, out_path=out_path)
     except Exception as e:
         logger.error(f"{filepath.name}: {e}")
-        return FileResult(filepath, ftype, ok=False, error=str(e))
+        return FileResult(filepath, ftype, ok=False, size_bytes=size_bytes,
+                           timestamp=ts, error=str(e))
+
+
+# ============================================================
+# Лог-файл прогона
+# ============================================================
+
+class RunLogger:
+    """Пишет один лог-файл на запуск: сначала саммари, затем построчно
+    по каждому обработанному файлу (дата/время, файл, размер, процессор,
+    результат, текст ошибки)."""
+
+    FILENAME_FMT = "%Y%m%d%H%M%S"
+
+    def __init__(self, log_dir: Path, run_ts: datetime):
+        self.log_dir = log_dir
+        self.path = log_dir / f"{run_ts.strftime(self.FILENAME_FMT)}-data2md.log"
+
+    def write(self, cfg: "Config", results: list, duration_sec: float) -> Path:
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        total = len(results)
+        skipped = sum(1 for r in results if r.skipped_reason)
+        errors = sum(1 for r in results if not r.ok and not r.skipped_reason)
+        ok = total - errors - skipped
+
+        lines = [
+            "=" * 70,
+            f"data2md v{VERSION} — запуск {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "=" * 70,
+            f"Входная директория:  {cfg.input_dir.resolve()}",
+            f"Выходная директория: {cfg.output_dir.resolve()}",
+            f"Корпусный строитель: {cfg.corpus_builder}",
+            f"Vision провайдер:    {cfg.vision_provider} ({cfg.vision_model})",
+            f"Потоков:             {cfg.workers}",
+            f"Режим:               {'dry-run' if cfg.dry_run else 'обычный'}",
+            f"Длительность:        {duration_sec:.2f} с",
+            "",
+            f"Всего файлов: {total} | Успешно: {ok} | Ошибок: {errors} | Пропущено: {skipped}",
+            "",
+        ]
+
+        col = (19, 42, 10, 26, 9)
+        header = (
+            f"{'Дата и время':<{col[0]}} | {'Файл':<{col[1]}} | {'Размер':>{col[2]}} | "
+            f"{'Процессор':<{col[3]}} | {'Результат':<{col[4]}} | Ошибка"
+        )
+        lines.append(header)
+        lines.append("-" * len(header))
+
+        for r in results:
+            if r.skipped_reason:
+                result_label = "SKIPPED"
+                error_text = r.skipped_reason
+            elif r.ok:
+                result_label = "DRY-RUN" if r.processor == "dry-run" else "OK"
+                error_text = ""
+            else:
+                result_label = "ERROR"
+                error_text = r.error or ""
+
+            filename = r.path.name
+            if len(filename) > col[1]:
+                filename = filename[: col[1] - 1] + "…"
+
+            lines.append(
+                f"{r.timestamp:<{col[0]}} | {filename:<{col[1]}} | "
+                f"{_human_size(r.size_bytes):>{col[2]}} | {r.processor:<{col[3]}} | "
+                f"{result_label:<{col[4]}} | {error_text}"
+            )
+
+        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return self.path
 
 
 # ============================================================
@@ -733,6 +845,10 @@ def parse_args(argv=None) -> argparse.Namespace:
                          help="Отключить кеширование описаний изображений")
     parser.add_argument("--summary-json", default="",
                          help="Сохранить машиночитаемый отчёт о прогоне в JSON")
+    parser.add_argument("--log-dir", default=os.getenv("LOG_DIR", "logs"),
+                         help="Папка для лог-файлов прогонов (default: logs)")
+    parser.add_argument("--no-log", action="store_true",
+                         help="Не писать лог-файл прогона")
     parser.add_argument("--version", action="version", version=f"data2md {VERSION}")
 
     return parser.parse_args(argv)
@@ -768,6 +884,8 @@ def build_config(args: argparse.Namespace) -> Config:
             args.cache_file or (Path(args.output) / ".data2md_vision_cache.json")
         ),
         summary_json=Path(args.summary_json) if args.summary_json else None,
+        log_dir=Path(args.log_dir),
+        file_log_enabled=not args.no_log,
     )
 
 
@@ -780,6 +898,9 @@ def setup_logging(verbose: bool) -> None:
 
 
 def main(argv=None) -> int:
+    run_start = datetime.now()
+    run_start_perf = time.perf_counter()
+
     args = parse_args(argv)
     setup_logging(args.verbose)
     cfg = build_config(args)
@@ -872,6 +993,12 @@ def main(argv=None) -> int:
         }
         cfg.summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info(f"  Отчёт:       {cfg.summary_json.resolve()}")
+
+    if cfg.file_log_enabled:
+        duration_sec = time.perf_counter() - run_start_perf
+        run_logger = RunLogger(cfg.log_dir, run_start)
+        log_path = run_logger.write(cfg, results, duration_sec)
+        logger.info(f"  Лог:         {log_path.resolve()}")
 
     if cfg.dry_run:
         logger.info("\n(dry-run — файлы не записывались)")
