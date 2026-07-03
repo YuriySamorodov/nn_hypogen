@@ -1,0 +1,60 @@
+# --- Виртуальное окружение (venv) ---
+venv/
+.venv/
+env/
+ENV/
+
+# --- Секреты / локальная конфигурация ---
+# .env содержит реальные API-ключи (Deepseek, VK, Yandex) — коммитить нельзя.
+# .env.example — наоборот, должен быть в репозитории как шаблон.
+.env
+.env.local
+.env.*.local
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# --- Логи прогонов data2md ---
+# Каждый запуск создаёт файл вида ГГГГММДДччммсс-data2md.log — не нужны в репо.
+logs/
+*.log
+
+# --- Кеш описаний изображений (Vision API) ---
+.data2md_vision_cache.json
+*.vision_cache.json
+
+# --- Входные/выходные данные пайплайна ---
+# Сами данные (часто конфиденциальные, тяжёлые) и сгенерированные Markdown
+# не должны попадать в git — только код и конфигурация.
+/данные/
+/repomix_input/
+corpus.txt
+*.summary.json
+
+# --- IDE / редакторы ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# --- Тестирование / покрытие ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# --- ОС ---
+Thumbs.db
+desktop.ini
