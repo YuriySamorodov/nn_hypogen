@@ -216,6 +216,8 @@ curl -s http://<host>:8800/research/ensemble \
 
 Наверху - свёрнутый блок «Как пользоваться (быстрый старт)».
 
+[🎥 Демо-видео на YouTube](https://youtu.be/wrLRQyRTaVk)
+
 ---
 
 ## Быстрый старт
