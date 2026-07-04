@@ -1,0 +1,12 @@
+{
+  "data_dir": "../Задача 1",
+  "documents": 31,
+  "chunks": 814,
+  "summaries": 13,
+  "size_classes": 35,
+  "extractability": 12,
+  "hypotheses": 11,
+  "ingestion_seconds": 2.6369,
+  "full_pipeline_seconds": 4.4691,
+  "total_seconds": 7.106
+}

@@ -1,0 +1,19 @@
+profile_id,profile_name,retrieval_mode,hypotheses,avg_final_score,evidence_coverage,causal_coverage,warning_rate,generator_diversity,corpus_use,hypothesis_breadth,runtime_seconds,quality_score
+v17,Metadata-filtered Vector RAG,auto,6,0.784815,1.0,1.0,0.0,0.333333,0.0,0.333333,3.105252,0.648778
+v16,Vector KG RAG,kg,6,0.783445,1.0,1.0,0.0,0.333333,0.0,0.333333,3.117923,0.648367
+v18,Full KG Vector Factory,auto,3,0.768445,1.0,1.0,0.0,0.333333,0.0,0.166667,0.272418,0.6272
+v02,Keyword RAG only,tfidf,6,0.641947,0.333333,1.0,0.666667,0.333333,0.0,1.0,0.64434,0.512584
+v14,Computer vision froth control,tfidf,6,0.641947,0.333333,1.0,0.666667,0.333333,0.0,1.0,0.689526,0.512584
+v03,Dense RAG only,tfidf,6,0.641947,0.333333,1.0,0.666667,0.333333,0.0,0.857143,0.685759,0.498298
+v04,Hybrid RAG,tfidf,6,0.665632,0.333333,1.0,0.666667,0.333333,0.0,0.75,0.683724,0.494689
+v07,RAG + KG + transparent scoring,tfidf,6,0.665632,0.333333,1.0,0.666667,0.333333,0.0,0.5,0.609558,0.469689
+v05,RAG + numeric Excel priority,tfidf,5,0.655179,0.4,1.0,0.6,0.166667,0.0,0.5,0.645587,0.462554
+v09,Multi-agent RAG,tfidf,3,0.646263,0.333333,1.0,0.666667,0.333333,0.0,0.3,0.636497,0.443879
+v01,Single LLM chatbot,tfidf,5,0.703684,0.0,1.0,1.0,0.166667,0.0,1.0,0.633981,0.431105
+v15,Recommended hybrid factory,tfidf,3,0.646263,0.333333,1.0,0.666667,0.333333,0.0,0.166667,0.678996,0.430546
+v08,Multi-agent only,tfidf,3,0.622579,0.333333,1.0,1.0,0.333333,0.0,0.375,0.64285,0.424274
+v11,Physics + process heuristics,tfidf,1,0.727778,0.0,1.0,1.0,0.166667,0.0,0.1,0.624272,0.348333
+v13,Digital twin first,tfidf,1,0.717895,0.0,1.0,1.0,0.166667,0.0,0.125,0.682308,0.347868
+v06,RAG + Knowledge Graph,tfidf,1,0.717895,0.0,1.0,1.0,0.166667,0.0,0.1,0.667796,0.345368
+v10,Multi-agent RAG + KG,tfidf,1,0.717895,0.0,1.0,1.0,0.166667,0.0,0.083333,0.620937,0.343702
+v12,Predictive ML only,,0,,,,,,,,0.638332,0.0

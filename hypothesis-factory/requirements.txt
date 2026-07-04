@@ -1,0 +1,15 @@
+pandas>=2.0
+openpyxl>=3.1
+pydantic>=2.5
+scikit-learn>=1.2
+networkx>=3.0
+numpy>=1.24
+streamlit>=1.36
+reportlab>=3.6
+pytest>=8.0
+plotly>=5.20
+psycopg[binary]>=3.2
+mp-api>=0.45
+python-dotenv>=1.0
+pypdfium2>=4.30
+neo4j>=5.20
