@@ -219,7 +219,19 @@ curl -s http://<host>:8800/research/ensemble \
 
 ### Демо-видео
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/wrLRQyRTaVk" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+<div align="center">
+  <iframe 
+    width="720" 
+    height="405" 
+    src="https://www.youtube.com/embed/wrLRQyRTaVk" 
+    frameborder="0" 
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+    allowfullscreen
+    style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+  </iframe>
+</div>
+
+**Демонстрация работы системы**
 
 ---
 
