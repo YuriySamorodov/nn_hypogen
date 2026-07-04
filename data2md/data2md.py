@@ -9,29 +9,36 @@ data2md - конвертер данных любого типа в Markdown дл
 
 Поддерживаемые форматы:
     - Изображения: PNG, JPG, JPEG
-      -> Текстовое описание через Qwen2.5-VL (vision-language модель) или
-         Deepseek API, VK API, Yandex Cloud Vision API, или
-         fallback-описание на основе имени файла, если модели недоступны.
-      -> Результат: Markdown с описанием узлов, связей, параметров.
+      -> Текстовое описание через Qwen2.5-VL (ollama), Deepseek API, VK API,
+         Yandex Cloud Vision API, или fallback-описание на основе имени файла.
+      -> Результат кешируется по хешу файла, чтобы не платить за повторный вызов API.
 
     - Текст: PDF, DOCX, MD, TXT
       -> Извлечение текста с сохранением структуры (заголовки, параграфы, таблицы).
-      -> Результат: Markdown с иерархией документа.
 
     - Таблицы: XLSX, XLS, CSV
-      -> Чтение через pandas, вывод в Markdown-таблицы.
-      -> Дополнительно: статистика по числовым колонкам, извлечение ключевых
-        метрик (Ni, Cu, Fe, потери, класс крупности и т.д.), первые N строк.
-      -> Результат: Markdown с таблицами и метриками.
+      -> Чтение через pandas (в т.ч. все листы Excel), вывод в Markdown-таблицы,
+         статистика по числовым колонкам, извлечение ключевых метрик
+         (Ni, Cu, Fe, потери, класс крупности и т.д.).
 
-Особенности:
-    - Обработка через .env конфигурацию или CLI параметры.
-    - Фильтрация по расширениям (--ext-include, --ext-exclude).
-    - Переключение типов данных (--no-images, --no-text, --no-tables).
-    - Ограничения: --max-rows для Excel, --page-limit для PDF.
-    - Vision через несколько провайдеров: ollama (Qwen2.5-VL), Deepseek API, VK API, Yandex Cloud.
-    - Корпусный строитель: repomix (по умолчанию) или yek.
-    - Автоматическое создание выходной директории.
+Что изменилось по сравнению с версией 1.x:
+    - Логирование через logging вместо print (--verbose управляет уровнем).
+    - Конфигурация оформлена как dataclass Config вместо словаря.
+    - 4 почти идентичные функции вызова Vision API объединены в одну с retry/backoff.
+    - Кеш описаний изображений по SHA-256 файла (не дергаем API повторно).
+    - Параллельная обработка файлов (--workers).
+    - Устойчивое чтение CSV/TXT в разных кодировках (utf-8 / cp1251 / latin-1).
+    - Поддержка всех листов Excel, а не только первого.
+    - Имена выходных .md файлов сохраняют относительный путь, чтобы не терять
+      структуру и не плодить случайные "_1", "_2" при одинаковых именах файлов.
+    - Пропуск файлов больше --max-file-size-mb с предупреждением.
+    - --dry-run: показать, что будет обработано, без записи файлов.
+    - --summary-json: сохранить машиночитаемый отчёт о прогоне.
+    - Каждый запуск пишет отдельный лог-файл в logs/ (--log-dir):
+      имя вида YYYYMMDDhhmmss-data2md.log, в начале — саммари прогона,
+      далее по одной строке на файл (дата/время, файл, размер, процессор,
+      результат, текст ошибки).
+    - Исходные CLI-флаги полностью сохранены для обратной совместимости.
 
 Использование:
     python data2md.py --input ./данные --output ./repomix_input
@@ -41,52 +48,54 @@ data2md - конвертер данных любого типа в Markdown дл
     python data2md.py --input ./данные --output ./repomix_input --vision-provider vk --vision-vk-key YOUR_KEY
     python data2md.py --input ./данные --output ./repomix_input --vision-provider yandex --vision-yandex-key YOUR_KEY
     python data2md.py --input ./данные --output ./repomix_input --corpus-builder yek
+    python data2md.py --input ./данные --output ./repomix_input --workers 8 --dry-run
 """
 
+from __future__ import annotations
+
 import argparse
+import base64
+import hashlib
+import json
+import logging
 import os
-import shutil
 import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
+from threading import Lock
+from typing import Callable, Optional
 
 import pandas as pd
 from docx import Document
 from pypdf import PdfReader
 
-# ============================================================
-# Загрузка .env
-# ============================================================
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     pass  # python-dotenv не обязателен
 
-# ============================================================
-# Конфигурация из .env / defaults
-# ============================================================
-CFG = {
-    "INPUT_DIR": os.getenv("INPUT_DIR", "./данные"),
-    "OUTPUT_DIR": os.getenv("OUTPUT_DIR", "./repomix_input"),
-    "CORPUS_BUILDER": os.getenv("CORPUS_BUILDER", "repomix"),  # repomix или yek
-    "VISION_MODEL": os.getenv("VISION_MODEL", "qwen2.5-vl:7b"),
-    "VISION_OLLAMA_HOST": os.getenv("VISION_OLLAMA_HOST", "http://localhost:11434"),
-    "VISION_DEEPSEEK_API_KEY": os.getenv("VISION_DEEPSEEK_API_KEY", ""),
-    "VISION_VK_API_KEY": os.getenv("VISION_VK_API_KEY", ""),
-    "VISION_YANDEX_CLOUD_API_KEY": os.getenv("VISION_YANDEX_CLOUD_API_KEY", ""),
-    "MAX_TABLE_ROWS": int(os.getenv("MAX_TABLE_ROWS", "50")),
-    "PDF_PAGE_LIMIT": int(os.getenv("PDF_PAGE_LIMIT", "0")),
-    "IMAGE_ENABLED": os.getenv("IMAGE_ENABLED", "true").lower() == "true",
-    "TEXT_ENABLED": os.getenv("TEXT_ENABLED", "true").lower() == "true",
-    "TABLE_ENABLED": os.getenv("TABLE_ENABLED", "true").lower() == "true",
-    "INCLUDE_STATS": os.getenv("INCLUDE_STATS", "true").lower() == "true",
-    "INCLUDE_KEY_METRICS": os.getenv("INCLUDE_KEY_METRICS", "true").lower() == "true",
-    "VERBOSE": os.getenv("VERBOSE", "false").lower() == "true",
-    "EXTENSIONS_INCLUDE": os.getenv("EXTENSIONS_INCLUDE", ""),
-    "EXTENSIONS_EXCLUDE": os.getenv("EXTENSIONS_EXCLUDE", ".log,.tmp"),
-}
+try:
+    import requests
+except ImportError:
+    requests = None  # без него Vision-провайдеры недоступны, но остальное работает
 
-# Mapping: расширение - тип
+try:
+    from tqdm import tqdm  # опционально, для прогресс-бара
+except ImportError:
+    tqdm = None
+
+VERSION = "2.1.0"
+
+logger = logging.getLogger("data2md")
+
+# ============================================================
+# Статичные справочники
+# ============================================================
+
 EXT_MAP = {
     ".png": "image", ".jpg": "image", ".jpeg": "image",
     ".pdf": "text",
@@ -95,438 +104,663 @@ EXT_MAP = {
     ".xlsx": "tabular", ".xls": "tabular", ".csv": "tabular",
 }
 
-# Ключевые слова для извлечения метрик из таблиц
-KEY_METRICS_KEYWORDS = ['ni', 'никель', 'cu', 'медь', 'потер', 'содерж',
-                        'co', 'кобальт', 'fe', 'железо', 's', 'сера',
-                        'au', 'золото', 'ag', 'серебро', 'pt', 'pd',
-                        'класс', 'крупность', 'извлечен', 'хвост']
+KEY_METRICS_KEYWORDS = [
+    'ni', 'никель', 'cu', 'медь', 'потер', 'содерж',
+    'co', 'кобальт', 'fe', 'железо', 's', 'сера',
+    'au', 'золото', 'ag', 'серебро', 'pt', 'pd',
+    'класс', 'крупность', 'извлечен', 'хвост',
+]
+
+# Кодировки, которые пробуем по очереди при чтении текстовых файлов.
+TEXT_ENCODINGS = ("utf-8-sig", "utf-8", "cp1251", "latin-1")
+
+VISION_PROMPT = (
+    "Опиши изображение как Markdown.\n"
+    "Извлеки: узлы (оборудование, минералы, продукты), связи (потоки, зависимости), параметры.\n"
+    "Формат: текст с перечислениями и таблицами."
+)
+
+# Конфигурация HTTP Vision-провайдеров (кроме ollama — у него свой протокол).
+# Каждый провайдер описывает: URL, как собрать заголовки, тело запроса и как
+# извлечь текст ответа. Это заменяет 3 дублирующиеся функции из версии 1.x.
+HTTP_VISION_PROVIDERS: dict = {
+    "deepseek": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "model": "deepseek-vl",
+        "headers": lambda key: {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        "payload": lambda b64, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": VISION_PROMPT, "images": [b64]}],
+            "stream": False,
+        },
+        "parse": lambda data: data.get("choices", [{}])[0].get("message", {}).get("content"),
+    },
+    "vk": {
+        "url": "https://api.vk.com/v1/images/describe",
+        "model": "vision",
+        "headers": lambda key: {"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        "payload": lambda b64, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": VISION_PROMPT, "images": [b64]}],
+            "stream": False,
+        },
+        "parse": lambda data: data.get("description"),
+    },
+    "yandex": {
+        "url": "https://vision.api.cloud.yandex.net/v1/images/describe",
+        "model": "vision",
+        "headers": lambda key: {"Authorization": f"Api-Key {key}", "Content-Type": "application/json"},
+        "payload": lambda b64, model: {
+            "model": model,
+            "messages": [{"role": "user", "content": VISION_PROMPT, "images": [b64]}],
+            "stream": False,
+        },
+        "parse": lambda data: data.get("description"),
+    },
+}
 
 
 # ============================================================
-# Обработчики
+# Конфигурация запуска
 # ============================================================
 
-def image_to_md(image_path: str, cfg: dict) -> str:
-    """Изображение в Markdown (через Qwen2.5-VL, Deepseek API, VK API или Yandex Cloud)."""
-    stem = Path(image_path).stem
-    name = Path(image_path).name
+@dataclass
+class Config:
+    input_dir: Path
+    output_dir: Path
+    corpus_builder: str = "repomix"
+
+    ext_include: list = field(default_factory=list)
+    ext_exclude: list = field(default_factory=lambda: [".log", ".tmp"])
+
+    images_enabled: bool = True
+    text_enabled: bool = True
+    tables_enabled: bool = True
+
+    max_table_rows: int = 50
+    pdf_page_limit: int = 0
+
+    vision_provider: str = "ollama"
+    vision_model: str = "qwen2.5-vl:7b"
+    ollama_host: str = "http://localhost:11434"
+    vision_keys: dict = field(default_factory=dict)  # provider -> api key
+
+    include_stats: bool = True
+    include_key_metrics: bool = True
+
+    verbose: bool = False
+    workers: int = 4
+    max_file_size_mb: float = 200.0
+    dry_run: bool = False
+    cache_path: Optional[Path] = None
+    summary_json: Optional[Path] = None
+
+    log_dir: Path = field(default_factory=lambda: Path("logs"))
+    file_log_enabled: bool = True
+
+    def should_process(self, filepath: Path) -> bool:
+        ext = filepath.suffix.lower()
+        ftype = EXT_MAP.get(ext)
+        if ftype is None:
+            return False
+        if self.ext_include and ext not in self.ext_include:
+            return False
+        if ext in self.ext_exclude:
+            return False
+        if ftype == "image" and not self.images_enabled:
+            return False
+        if ftype == "text" and not self.text_enabled:
+            return False
+        if ftype == "tabular" and not self.tables_enabled:
+            return False
+        return True
+
+
+# ============================================================
+# Кеш описаний изображений (по SHA-256 содержимого файла)
+# ============================================================
+
+class VisionCache:
+    """Простой JSON-кеш на диске, чтобы не пересчитывать описания изображений
+    при повторных запусках (Vision API может быть платным/медленным)."""
+
+    def __init__(self, path: Optional[Path]):
+        self.path = path
+        self._lock = Lock()
+        self._data: dict = {}
+        if self.path and self.path.exists():
+            try:
+                self._data = json.loads(self.path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Не удалось прочитать кеш {self.path}: {e}")
+                self._data = {}
+
+    @staticmethod
+    def _key(file_hash: str, provider: str, model: str) -> str:
+        return f"{provider}:{model}:{file_hash}"
+
+    def get(self, file_hash: str, provider: str, model: str) -> Optional[str]:
+        return self._data.get(self._key(file_hash, provider, model))
+
+    def set(self, file_hash: str, provider: str, model: str, value: str) -> None:
+        with self._lock:
+            self._data[self._key(file_hash, provider, model)] = value
+            if self.path:
+                try:
+                    self.path.write_text(
+                        json.dumps(self._data, ensure_ascii=False, indent=2), encoding="utf-8"
+                    )
+                except OSError as e:
+                    logger.warning(f"Не удалось сохранить кеш {self.path}: {e}")
+
+
+def _human_size(num_bytes: int) -> str:
+    """Читаемый размер файла: 512 B / 340.5 KB / 1.2 MB / 2.1 GB."""
+    size = float(num_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ============================================================
+# Обработчики форматов
+# ============================================================
+
+def image_to_md(image_path: Path, cfg: Config, cache: VisionCache) -> tuple:
+    """Изображение -> Markdown-описание через Vision API (с кешированием).
+
+    Возвращает (markdown, метка_процессора), где метка_процессора отражает,
+    что реально сработало: конкретный vision-провайдер, кеш или fallback —
+    это то, что попадает в лог-файл прогона."""
+    name = image_path.name
     md = f"# {name}\n\n"
 
-    # Определяем приоритет Vision провайдеров
-    vision_provider = cfg.get("VISION_PROVIDER", "ollama")  # ollama, deepseek, vk, yandex
-    
-    if vision_provider == "ollama" and cfg.get("VISION_MODEL") and _is_ollama_available():
-        # Реальный вызов Qwen2.5-VL через ollama
-        md += _ollama_vision_describe(image_path, cfg)
-    elif vision_provider == "deepseek" and cfg.get("VISION_DEEPSEEK_API_KEY"):
-        # Вызов Deepseek API
-        md += _deepseek_vision_describe(image_path, cfg)
-    elif vision_provider == "vk" and cfg.get("VISION_VK_API_KEY"):
-        # Вызов VK API
-        md += _vk_vision_describe(image_path, cfg)
-    elif vision_provider == "yandex" and cfg.get("VISION_YANDEX_CLOUD_API_KEY"):
-        # Вызов Yandex Cloud
-        md += _yandex_vision_describe(image_path, cfg)
+    provider = cfg.vision_provider
+    try:
+        file_hash = _sha256_file(image_path)
+    except OSError as e:
+        return md + f"*Не удалось прочитать файл: {e}*\n", "vision:error"
+
+    cached = cache.get(file_hash, provider, cfg.vision_model)
+    if cached is not None:
+        logger.debug(f"{name}: описание взято из кеша")
+        md += cached
+        md += f"\n\n*Источник: {name} (кеш)*\n"
+        return md, f"vision:{provider}:cache"
+
+    if requests is None:
+        description = _image_fallback_description(image_path)
+        processor = "vision:fallback"
+    elif provider == "ollama" and _is_ollama_available(cfg.ollama_host):
+        description = _ollama_vision_describe(image_path, cfg)
+        processor = f"vision:ollama:{cfg.vision_model}"
+    elif provider in HTTP_VISION_PROVIDERS and cfg.vision_keys.get(provider):
+        description = _http_vision_describe(image_path, cfg, provider)
+        processor = f"vision:{provider}"
     else:
-        # Заглушка на основе имени файла
-        md += _image_fallback_description(image_path)
+        description = _image_fallback_description(image_path)
+        processor = "vision:fallback"
 
+    md += description
     md += f"\n\n*Источник: {name}*\n"
-    return md
+
+    if description.startswith("*Ошибка"):
+        processor += ":error"
+
+    # Кешируем только настоящие ответы API, не fallback-заглушку и не ошибки.
+    if requests is not None and not description.startswith("*Изображение") and not description.startswith("*Ошибка"):
+        cache.set(file_hash, provider, cfg.vision_model, description)
+
+    return md, processor
 
 
-def table_to_md(table_path: str, cfg: dict) -> str:
-    """Excel/CSV в Markdown таблицу + статистику."""
-    stem = Path(table_path).stem
-    ext = Path(table_path).suffix.lower()
+def _read_excel_all_sheets(path: Path) -> dict:
+    """Читает все листы Excel-файла. Возвращает {имя_листа: DataFrame}."""
+    try:
+        return pd.read_excel(path, sheet_name=None)
+    except ImportError as e:
+        # Например, отсутствует xlrd для старого .xls
+        raise RuntimeError(
+            f"Не хватает библиотеки для чтения {path.suffix}: {e}. "
+            f"Для .xls установите: pip install xlrd"
+        ) from e
 
-    md = f"# {Path(table_path).name}\n\n"
 
-    # Загрузка
+def _read_csv_resilient(path: Path) -> pd.DataFrame:
+    """Пробует разные кодировки, т.к. русские CSV часто в cp1251."""
+    last_exc = None
+    for enc in TEXT_ENCODINGS:
+        try:
+            return pd.read_csv(path, encoding=enc)
+        except (UnicodeDecodeError, UnicodeError) as e:
+            last_exc = e
+            continue
+    # Последняя попытка с заменой нечитаемых символов, чтобы не падать совсем.
+    logger.warning(f"{path.name}: не удалось однозначно определить кодировку, читаю с заменой символов")
+    return pd.read_csv(path, encoding="utf-8", encoding_errors="replace")
+
+
+def table_to_md(table_path: Path, cfg: Config) -> str:
+    """Excel (все листы) / CSV -> Markdown таблицы + статистика + ключевые метрики."""
+    ext = table_path.suffix.lower()
+    md = f"# {table_path.name}\n\n"
+
     try:
         if ext == ".csv":
-            df = pd.read_csv(table_path)
+            sheets = {"": _read_csv_resilient(table_path)}
         else:
-            df = pd.read_excel(table_path)
+            sheets = _read_excel_all_sheets(table_path)
     except Exception as e:
-        return f"# {Path(table_path).name}\n\n*Ошибка загрузки: {e}*\n"
+        logger.error(f"{table_path.name}: ошибка загрузки — {e}")
+        return md + f"*Ошибка загрузки: {e}*\n"
 
-    md += f"- **Строк**: {len(df)}, **Колонок**: {len(df.columns)}\n"
-    md += f"- **Типы данных**: {', '.join(str(df[c].dtype) for c in df.columns[:5])}"
-    if len(df.columns) > 5:
-        md += f" ... (+{len(df.columns)-5})"
-    md += "\n\n"
+    for sheet_name, df in sheets.items():
+        if sheet_name:
+            md += f"## Лист: {sheet_name}\n\n"
 
-    # Имена колонок
-    md += "## Колонки\n\n"
-    for i, col in enumerate(df.columns):
-        md += f"{i+1}. `{col}` ({df[col].dtype})"
-        non_null = df[col].notna().sum()
-        md += f" — {non_null}/{len(df)} непустых"
-        md += "\n"
+        md += f"- **Строк**: {len(df)}, **Колонок**: {len(df.columns)}\n"
+        dtypes_preview = ', '.join(str(df[c].dtype) for c in df.columns[:5])
+        md += f"- **Типы данных**: {dtypes_preview}"
+        if len(df.columns) > 5:
+            md += f" ... (+{len(df.columns) - 5})"
+        md += "\n\n"
 
-    # Данные (первые N строк)
-    max_rows = cfg.get("MAX_TABLE_ROWS", 50)
-    md += f"\n## Данные (первые {min(max_rows, len(df))} строк)\n\n"
-    md += df.head(max_rows).to_markdown(index=False)
+        md += "### Колонки\n\n"
+        for i, col in enumerate(df.columns):
+            non_null = df[col].notna().sum()
+            md += f"{i + 1}. `{col}` ({df[col].dtype}) — {non_null}/{len(df)} непустых\n"
 
-    # Статистика
-    if cfg.get("INCLUDE_STATS", True):
-        numeric_cols = df.select_dtypes(include="number").columns
-        if len(numeric_cols) > 0:
-            md += "\n\n## Статистика\n\n"
-            stats = df[numeric_cols].describe().round(3)
-            stats.index.name = "метрика"
-            md += stats.to_markdown()
+        max_rows = cfg.max_table_rows
+        md += f"\n### Данные (первые {min(max_rows, len(df))} строк)\n\n"
+        try:
+            md += df.head(max_rows).to_markdown(index=False)
+        except ImportError:
+            # tabulate не установлен — fallback на plain-text представление
+            md += df.head(max_rows).to_string(index=False)
 
-    # Ключевые метрики
-    if cfg.get("INCLUDE_KEY_METRICS", True):
-        for col in df.columns:
-            col_lower = col.lower()
-            if any(kw in col_lower for kw in KEY_METRICS_KEYWORDS):
-                md += f"\n\n**Ключевая колонка**: `{col}`\n"
+        if cfg.include_stats:
+            numeric_cols = df.select_dtypes(include="number").columns
+            if len(numeric_cols) > 0:
+                md += "\n\n### Статистика\n\n"
+                stats = df[numeric_cols].describe().round(3)
+                stats.index.name = "метрика"
                 try:
+                    md += stats.to_markdown()
+                except ImportError:
+                    md += stats.to_string()
+
+        if cfg.include_key_metrics:
+            for col in df.columns:
+                col_lower = str(col).lower()
+                if any(kw in col_lower for kw in KEY_METRICS_KEYWORDS):
                     num = pd.to_numeric(df[col], errors='coerce')
                     valid = num.dropna()
                     if len(valid) > 0:
+                        md += f"\n\n**Ключевая колонка**: `{col}`\n"
                         md += f"- Мин: {valid.min():.3f}\n"
                         md += f"- Макс: {valid.max():.3f}\n"
                         md += f"- Среднее: {valid.mean():.3f}\n"
                         md += f"- Медиана: {valid.median():.3f}\n"
                         md += f"- Сумма: {valid.sum():.3f}\n"
-                except:
-                    pass
 
-    md += f"\n\n*Источник: {Path(table_path).name}*\n"
+        md += "\n\n"
+
+    md += f"*Источник: {table_path.name}*\n"
     return md
 
 
-def docx_to_md(docx_path: str, cfg: dict) -> str:
-    """DOCX в Markdown."""
+def docx_to_md(docx_path: Path, cfg: Config) -> str:
+    """DOCX -> Markdown."""
     doc = Document(docx_path)
-    md = f"# {Path(docx_path).name}\n\n"
+    md = f"# {docx_path.name}\n\n"
     md += f"**Параграфов**: {len(doc.paragraphs)}, **Таблиц**: {len(doc.tables)}\n\n"
 
-    # Параграфы
     for para in doc.paragraphs:
         text = para.text.strip()
-        if text:
-            style = para.style.name.lower() if para.style else ""
-            if "heading" in style or "заголов" in style:
-                level = min(sum(1 for c in style if c.isdigit()) + 1, 6)
-                md += f"{'#' * level} {text}\n\n"
-            else:
-                md += text + "\n\n"
+        if not text:
+            continue
+        style = para.style.name.lower() if para.style else ""
+        if "heading" in style or "заголов" in style:
+            digits = "".join(c for c in style if c.isdigit())
+            level = min(int(digits) + 1, 6) if digits else 2
+            md += f"{'#' * level} {text}\n\n"
+        else:
+            md += text + "\n\n"
 
-    # Таблицы документа
     for i, table in enumerate(doc.tables):
-        md += f"## Таблица {i+1}\n\n"
-        rows = []
-        for row in table.rows:
-            rows.append([cell.text.strip() for cell in row.cells])
+        md += f"## Таблица {i + 1}\n\n"
+        rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
         if rows:
-            header = rows[0]
-            data = rows[1:]
+            header, data = rows[0], rows[1:]
             if data:
-                df = pd.DataFrame(data, columns=header)
-                md += df.to_markdown(index=False)
+                try:
+                    tdf = pd.DataFrame(data, columns=header)
+                    md += tdf.to_markdown(index=False)
+                except (ImportError, ValueError):
+                    md += f"| {' | '.join(header)} |\n"
+                    for row in data:
+                        md += f"| {' | '.join(row)} |\n"
             else:
                 md += f"| {' | '.join(header)} |\n"
         md += "\n"
 
-    md += f"\n\n*Источник: {Path(docx_path).name}*\n"
+    md += f"\n\n*Источник: {docx_path.name}*\n"
     return md
 
 
-def pdf_to_md(pdf_path: str, cfg: dict) -> str:
-    """PDF в Markdown."""
-    reader = PdfReader(pdf_path)
+def pdf_to_md(pdf_path: Path, cfg: Config) -> str:
+    """PDF -> Markdown."""
+    try:
+        reader = PdfReader(pdf_path)
+    except Exception as e:
+        return f"# {pdf_path.name}\n\n*Ошибка чтения PDF: {e}*\n"
+
     total = len(reader.pages)
-    limit = cfg.get("PDF_PAGE_LIMIT", 0)
+    limit = cfg.pdf_page_limit
     pages = total if limit <= 0 else min(total, limit)
 
-    md = f"# {Path(pdf_path).name}\n\n"
+    md = f"# {pdf_path.name}\n\n"
     md += f"**Страниц**: {total}, обработано: {pages}\n\n"
 
     for i in range(pages):
-        text = reader.pages[i].extract_text()
+        try:
+            text = reader.pages[i].extract_text() or ""
+        except Exception as e:
+            logger.warning(f"{pdf_path.name}: страница {i + 1} не читается — {e}")
+            continue
         if text.strip():
-            md += f"## Страница {i+1}\n\n{text}\n\n"
+            md += f"## Страница {i + 1}\n\n{text}\n\n"
 
-    md += f"\n\n*Источник: {Path(pdf_path).name}*\n"
+    md += f"\n\n*Источник: {pdf_path.name}*\n"
     return md
 
 
-def text_to_md(text_path: str, cfg: dict) -> str:
-    """Просто копирует .md/.txt как есть (с заголовком)."""
-    with open(text_path, "r", encoding="utf-8", errors="replace") as f:
-        content = f.read()
-    return content
+def text_to_md(text_path: Path, cfg: Config) -> str:
+    """Копирует .md/.txt как есть, пробуя разные кодировки."""
+    for enc in TEXT_ENCODINGS:
+        try:
+            return text_path.read_text(encoding=enc)
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    return text_path.read_text(encoding="utf-8", errors="replace")
 
 
 # ============================================================
-# Вспомогательные функции
+# Vision API — вспомогательные функции
 # ============================================================
 
-def _is_ollama_available() -> bool:
-    """Проверяет, доступен ли ollama."""
+def _is_ollama_available(host: str) -> bool:
+    if requests is None:
+        return False
     try:
-        import requests
-        resp = requests.get(f"{CFG['VISION_OLLAMA_HOST']}/api/tags", timeout=2)
+        resp = requests.get(f"{host}/api/tags", timeout=2)
         return resp.status_code == 200
-    except Exception:
+    except requests.RequestException:
         return False
 
 
-def _ollama_vision_describe(image_path: str, cfg: dict) -> str:
-    """Реальный вызов Qwen2.5-VL через ollama API."""
-    import base64
-    import requests
+def _post_with_retry(url: str, headers: dict, payload: dict, timeout: int = 30,
+                      retries: int = 2, backoff: float = 1.5):
+    """POST с несколькими попытками и экспоненциальной задержкой."""
+    last_exc: Optional[Exception] = None
+    for attempt in range(retries + 1):
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as e:
+            last_exc = e
+            if attempt < retries:
+                wait = backoff ** attempt
+                logger.debug(f"Попытка {attempt + 1} неудачна ({e}), повтор через {wait:.1f}с")
+                time.sleep(wait)
+    raise last_exc  # type: ignore[misc]
 
+
+def _ollama_vision_describe(image_path: Path, cfg: Config) -> str:
+    """Вызов Qwen2.5-VL через локальный ollama."""
     with open(image_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
 
     payload = {
-        "model": cfg.get("VISION_MODEL", "qwen2.5-vl:7b"),
-        "prompt": """Опиши изображение как Markdown.
-Извлеки: узлы (оборудование, минералы, продукты), связи (потоки, зависимости), параметры.
-Формат: текст с перечислениями и таблицами.""",
+        "model": cfg.vision_model,
+        "prompt": VISION_PROMPT,
         "images": [b64],
         "stream": False,
     }
 
     try:
-        resp = requests.post(
-            f"{cfg.get('VISION_OLLAMA_HOST', 'http://localhost:11434')}/api/generate",
-            json=payload,
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            return resp.json().get("response", "*нет описания*")
+        resp = _post_with_retry(f"{cfg.ollama_host}/api/generate", headers={}, payload=payload)
+        return resp.json().get("response", "*нет описания*")
     except Exception as e:
-        return f"*Ошибка Vision API: {e}*\n"
+        logger.warning(f"{image_path.name}: ошибка Ollama Vision — {e}")
+        return f"*Ошибка Vision API (ollama): {e}*\n"
 
-    return "*нет описания*"
 
-
-def _deepseek_vision_describe(image_path: str, cfg: dict) -> str:
-    """Вызов Deepseek API для описания изображений."""
-    import base64
-    import requests
+def _http_vision_describe(image_path: Path, cfg: Config, provider: str) -> str:
+    """Единая функция для Deepseek / VK / Yandex — провайдеры отличаются
+    только URL/заголовками/форматом ответа, описанными в HTTP_VISION_PROVIDERS."""
+    spec = HTTP_VISION_PROVIDERS[provider]
+    api_key = cfg.vision_keys.get(provider, "")
 
     with open(image_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
 
-    # Deepseek API endpoint (пример, может потребовать корректировки)
-    api_key = cfg.get("VISION_DEEPSEEK_API_KEY", "")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "deepseek-vl",
-        "messages": [
-            {
-                "role": "user",
-                "content": """Опиши изображение как Markdown.
-Извлеки: узлы (оборудование, минералы, продукты), связи (потоки, зависимости), параметры.
-Формат: текст с перечислениями и таблицами.""",
-                "images": [b64]
-            }
-        ],
-        "stream": False
-    }
+    headers = spec["headers"](api_key)
+    payload = spec["payload"](b64, cfg.vision_model or spec["model"])
 
     try:
-        resp = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            result = resp.json()
-            return result.get("choices", [{}])[0].get("message", {}).get("content", "*нет описания*")
-        else:
-            return f"*Ошибка Deepseek API: {resp.status_code}*\n"
+        resp = _post_with_retry(spec["url"], headers=headers, payload=payload)
+        data = resp.json()
+        result = spec["parse"](data)
+        return result or "*нет описания*"
     except Exception as e:
-        return f"*Ошибка Deepseek API: {e}*\n"
+        logger.warning(f"{image_path.name}: ошибка {provider} Vision — {e}")
+        return f"*Ошибка {provider} API: {e}*\n"
 
 
-def _vk_vision_describe(image_path: str, cfg: dict) -> str:
-    """Вызов VK API для описания изображений."""
-    import base64
-    import requests
-
-    with open(image_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("utf-8")
-
-    # VK API endpoint (пример, может потребовать корректировки)
-    api_key = cfg.get("VISION_VK_API_KEY", "")
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "vision",
-        "messages": [
-            {
-                "role": "user",
-                "content": """Опиши изображение как Markdown.
-Извлеки: узлы (оборудование, минералы, продукты), связи (потоки, зависимости), параметры.
-Формат: текст с перечислениями и таблицами.""",
-                "images": [b64]
-            }
-        ],
-        "stream": False
-    }
-
-    try:
-        resp = requests.post(
-            "https://api.vk.com/v1/images/describe",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            result = resp.json()
-            return result.get("description", "*нет описания*")
-        else:
-            return f"*Ошибка VK API: {resp.status_code}*\n"
-    except Exception as e:
-        return f"*Ошибка VK API: {e}*\n"
-
-
-def _yandex_vision_describe(image_path: str, cfg: dict) -> str:
-    """Вызов Yandex Cloud API для описания изображений."""
-    import base64
-    import requests
-
-    with open(image_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("utf-8")
-
-    # Yandex Cloud Vision API endpoint (пример, может потребовать корректировки)
-    api_key = cfg.get("VISION_YANDEX_CLOUD_API_KEY", "")
-    headers = {
-        "Authorization": f"Api-Key {api_key}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "vision",
-        "messages": [
-            {
-                "role": "user",
-                "content": """Опиши изображение как Markdown.
-Извлеки: узлы (оборудование, минералы, продукты), связи (потоки, зависимости), параметры.
-Формат: текст с перечислениями и таблицами.""",
-                "images": [b64]
-            }
-        ],
-        "stream": False
-    }
-
-    try:
-        resp = requests.post(
-            "https://vision.api.cloud.yandex.net/v1/images/describe",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-        if resp.status_code == 200:
-            result = resp.json()
-            return result.get("description", "*нет описания*")
-        else:
-            return f"*Ошибка Yandex Cloud API: {resp.status_code}*\n"
-    except Exception as e:
-        return f"*Ошибка Yandex Cloud API: {e}*\n"
-
-
-def _image_fallback_description(image_path: str) -> str:
-    """Заглушка"""
-    name = Path(image_path).name.lower()
+def _image_fallback_description(image_path: Path) -> str:
+    """Заглушка на основе имени файла, когда Vision API недоступен."""
+    name = image_path.name.lower()
     desc = f"*Изображение: {name}*\n\n"
 
     if any(x in name for x in ("схем", "флотац")):
-        desc += """Схема флотации (на основе имени файла).
-Узлы: дробилка, грохот, мельница, классификатор, гидроциклон, флотомашина, хвосты, концентрат.
-Связи: последовательность операций с возвратами.
-Рекомендация: установите Qwen2.5-VL для точного описания через ollama."""
+        desc += (
+            "Схема флотации (на основе имени файла).\n"
+            "Узлы: дробилка, грохот, мельница, классификатор, гидроциклон, флотомашина, хвосты, концентрат.\n"
+            "Связи: последовательность операций с возвратами.\n"
+            "Рекомендация: установите Qwen2.5-VL для точного описания через ollama."
+        )
     elif any(x in name for x in ("оборуд", "регламент")):
-        desc += """Список оборудования обогатительной фабрики (на основе имени файла).
-Типы: мельницы, флотомашины, классификаторы, насосы, гидроциклоны.
-Рекомендация: установите Qwen2.5-VL для точного описания через ollama."""
+        desc += (
+            "Список оборудования обогатительной фабрики (на основе имени файла).\n"
+            "Типы: мельницы, флотомашины, классификаторы, насосы, гидроциклоны.\n"
+            "Рекомендация: установите Qwen2.5-VL для точного описания через ollama."
+        )
     else:
         desc += f"Изображение {name}. Для точного описания установите Qwen2.5-VL."
 
     return desc
 
 
-def _should_process(filepath: str, cfg: dict) -> bool:
-    """Проверяет, нужно ли обрабатывать файл."""
-    ext = Path(filepath).suffix.lower()
+# ============================================================
+# Обработка файлов
+# ============================================================
 
-    # Проверка типа
-    ftype = EXT_MAP.get(ext)
-    if ftype is None:
-        return False
-
-    # Проверка включённых расширений
-    incl = cfg.get("EXTENSIONS_INCLUDE", "")
-    if incl:
-        allowed = [x.strip().lower() for x in incl.split(",") if x.strip()]
-        if ext not in allowed:
-            return False
-
-    # Проверка исключённых
-    excl = cfg.get("EXTENSIONS_EXCLUDE", "")
-    if excl:
-        denied = [x.strip().lower() for x in excl.split(",") if x.strip()]
-        if ext in denied:
-            return False
-
-    # Проверка флагов типов
-    if ftype == "image" and not cfg.get("IMAGE_ENABLED", True):
-        return False
-    if ftype == "text" and not cfg.get("TEXT_ENABLED", True):
-        return False
-    if ftype == "tabular" and not cfg.get("TABLE_ENABLED", True):
-        return False
-
-    return True
+HANDLERS: dict = {
+    "tabular": lambda path, cfg, cache: (table_to_md(path, cfg), "pandas"),
+    "image": lambda path, cfg, cache: image_to_md(path, cfg, cache),
+}
 
 
-def _process_file(filepath: str, cfg: dict) -> str:
-    """Обрабатывает один файл -> Markdown."""
-    ext = Path(filepath).suffix.lower()
-    ftype = EXT_MAP.get(ext, "unknown")
-
-    handlers = {
-        "image": image_to_md,
-        "tabular": table_to_md,
-    }
+def _process_file(filepath: Path, cfg: Config, cache: VisionCache) -> tuple:
+    """Обрабатывает файл. Возвращает (markdown, метка_процессора) —
+    метка попадает в лог-файл прогона (см. RunLogger)."""
+    ext = filepath.suffix.lower()
 
     if ext == ".docx":
-        handler = docx_to_md
-    elif ext == ".pdf":
-        handler = pdf_to_md
-    elif ext in (".md", ".txt"):
-        handler = text_to_md
-    else:
-        handler = handlers.get(ftype)
+        return docx_to_md(filepath, cfg), "python-docx"
+    if ext == ".pdf":
+        return pdf_to_md(filepath, cfg), "pypdf"
+    if ext in (".md", ".txt"):
+        return text_to_md(filepath, cfg), "text-copy"
 
+    ftype = EXT_MAP.get(ext, "unknown")
+    handler = HANDLERS.get(ftype)
     if handler:
-        return handler(filepath, cfg)
-    return f"# {Path(filepath).name}\n\n*Неподдерживаемый формат: {ext}*\n"
+        return handler(filepath, cfg, cache)
+    return f"# {filepath.name}\n\n*Неподдерживаемый формат: {ext}*\n", "unsupported"
+
+
+def _output_path_for(filepath: Path, input_dir: Path, output_dir: Path) -> Path:
+    """Строит имя выходного файла, сохраняя относительный путь (заменяя
+    разделители на '__'), чтобы файлы с одинаковым именем в разных
+    подпапках не затирали друг друга и не превращались в бессмысленный _1/_2."""
+    try:
+        rel = filepath.relative_to(input_dir)
+    except ValueError:
+        rel = Path(filepath.name)
+    flat_name = "__".join(rel.with_suffix("").parts)
+    out_path = output_dir / f"{flat_name}.md"
+
+    counter = 1
+    while out_path.exists():
+        out_path = output_dir / f"{flat_name}_{counter}.md"
+        counter += 1
+    return out_path
+
+
+@dataclass
+class FileResult:
+    path: Path
+    ftype: str
+    ok: bool
+    processor: str = "-"
+    size_bytes: int = 0
+    timestamp: str = ""
+    out_path: Optional[Path] = None
+    error: Optional[str] = None
+    skipped_reason: Optional[str] = None
+
+
+def _handle_one(filepath: Path, cfg: Config, cache: VisionCache) -> FileResult:
+    ext = filepath.suffix.lower()
+    ftype = EXT_MAP.get(ext, "unknown")
+    size_bytes = filepath.stat().st_size
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    size_mb = size_bytes / (1024 * 1024)
+    if size_mb > cfg.max_file_size_mb:
+        msg = f"пропущен: {size_mb:.1f} МБ > лимита {cfg.max_file_size_mb} МБ"
+        logger.warning(f"{filepath.name}: {msg}")
+        return FileResult(filepath, ftype, ok=False, size_bytes=size_bytes,
+                           timestamp=ts, skipped_reason=msg)
+
+    if cfg.dry_run:
+        logger.info(f"[dry-run] {filepath} ({ftype})")
+        return FileResult(filepath, ftype, ok=True, processor="dry-run",
+                           size_bytes=size_bytes, timestamp=ts)
+
+    try:
+        md_content, processor = _process_file(filepath, cfg, cache)
+        out_path = _output_path_for(filepath, cfg.input_dir, cfg.output_dir)
+        out_path.write_text(md_content, encoding="utf-8")
+        logger.debug(f"{filepath.name} -> {out_path.name}")
+        return FileResult(filepath, ftype, ok=True, processor=processor,
+                           size_bytes=size_bytes, timestamp=ts, out_path=out_path)
+    except Exception as e:
+        logger.error(f"{filepath.name}: {e}")
+        return FileResult(filepath, ftype, ok=False, size_bytes=size_bytes,
+                           timestamp=ts, error=str(e))
+
+
+# ============================================================
+# Лог-файл прогона
+# ============================================================
+
+class RunLogger:
+    """Пишет один лог-файл на запуск: сначала саммари, затем построчно
+    по каждому обработанному файлу (дата/время, файл, размер, процессор,
+    результат, текст ошибки)."""
+
+    FILENAME_FMT = "%Y%m%d%H%M%S"
+
+    def __init__(self, log_dir: Path, run_ts: datetime):
+        self.log_dir = log_dir
+        self.path = log_dir / f"{run_ts.strftime(self.FILENAME_FMT)}-data2md.log"
+
+    def write(self, cfg: "Config", results: list, duration_sec: float) -> Path:
+        self.log_dir.mkdir(parents=True, exist_ok=True)
+
+        total = len(results)
+        skipped = sum(1 for r in results if r.skipped_reason)
+        errors = sum(1 for r in results if not r.ok and not r.skipped_reason)
+        ok = total - errors - skipped
+
+        lines = [
+            "=" * 70,
+            f"data2md v{VERSION} — запуск {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "=" * 70,
+            f"Входная директория:  {cfg.input_dir.resolve()}",
+            f"Выходная директория: {cfg.output_dir.resolve()}",
+            f"Корпусный строитель: {cfg.corpus_builder}",
+            f"Vision провайдер:    {cfg.vision_provider} ({cfg.vision_model})",
+            f"Потоков:             {cfg.workers}",
+            f"Режим:               {'dry-run' if cfg.dry_run else 'обычный'}",
+            f"Длительность:        {duration_sec:.2f} с",
+            "",
+            f"Всего файлов: {total} | Успешно: {ok} | Ошибок: {errors} | Пропущено: {skipped}",
+            "",
+        ]
+
+        col = (19, 42, 10, 26, 9)
+        header = (
+            f"{'Дата и время':<{col[0]}} | {'Файл':<{col[1]}} | {'Размер':>{col[2]}} | "
+            f"{'Процессор':<{col[3]}} | {'Результат':<{col[4]}} | Ошибка"
+        )
+        lines.append(header)
+        lines.append("-" * len(header))
+
+        for r in results:
+            if r.skipped_reason:
+                result_label = "SKIPPED"
+                error_text = r.skipped_reason
+            elif r.ok:
+                result_label = "DRY-RUN" if r.processor == "dry-run" else "OK"
+                error_text = ""
+            else:
+                result_label = "ERROR"
+                error_text = r.error or ""
+
+            filename = r.path.name
+            if len(filename) > col[1]:
+                filename = filename[: col[1] - 1] + "…"
+
+            lines.append(
+                f"{r.timestamp:<{col[0]}} | {filename:<{col[1]}} | "
+                f"{_human_size(r.size_bytes):>{col[2]}} | {r.processor:<{col[3]}} | "
+                f"{result_label:<{col[4]}} | {error_text}"
+            )
+
+        self.path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return self.path
 
 
 # ============================================================
 # CLI
 # ============================================================
 
-def parse_args(argv=None):
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="data2md — конвертер данных в Markdown для repomix",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -536,173 +770,244 @@ def parse_args(argv=None):
   %(prog)s --input ./данные --output ./repomix_input --no-images --max-rows 20
   %(prog)s --input ./данные --output ./repomix_input --ext-include .png,.xlsx
   %(prog)s --input ./данные --output ./repomix_input --verbose
-  %(prog)s --input ./данные --output ./repomix_input --include-stats --no-key-metrics
+  %(prog)s --input ./данные --output ./repomix_input --workers 8 --dry-run
         """,
     )
 
-    # Пути
-    parser.add_argument("--input", "-i", default=CFG["INPUT_DIR"],
-                        help="Входная директория с данными (default: ./данные)")
-    parser.add_argument("--output", "-o", default=CFG["OUTPUT_DIR"],
-                        help="Выходная директория для Markdown (default: ./repomix_input)")
+    parser.add_argument("--input", "-i", default=os.getenv("INPUT_DIR", "./данные"),
+                         help="Входная директория с данными (default: ./данные)")
+    parser.add_argument("--output", "-o", default=os.getenv("OUTPUT_DIR", "./repomix_input"),
+                         help="Выходная директория для Markdown (default: ./repomix_input)")
 
-    # Фильтры
-    parser.add_argument("--ext-include", default=CFG["EXTENSIONS_INCLUDE"],
-                        help="Только эти расширения (через запятую, напр. .png,.xlsx)")
-    parser.add_argument("--ext-exclude", default=CFG["EXTENSIONS_EXCLUDE"],
-                        help="Исключить расширения (через запятую, напр. .log,.tmp)")
+    parser.add_argument("--ext-include", default=os.getenv("EXTENSIONS_INCLUDE", ""),
+                         help="Только эти расширения (через запятую, напр. .png,.xlsx)")
+    parser.add_argument("--ext-exclude", default=os.getenv("EXTENSIONS_EXCLUDE", ".log,.tmp"),
+                         help="Исключить расширения (через запятую, напр. .log,.tmp)")
 
-    # Флаги типов
     parser.add_argument("--no-images", action="store_false", dest="images",
-                        help="Не обрабатывать изображения")
+                         help="Не обрабатывать изображения")
     parser.add_argument("--no-text", action="store_false", dest="text",
-                        help="Не обрабатывать текст/PDF/DOCX")
+                         help="Не обрабатывать текст/PDF/DOCX")
     parser.add_argument("--no-tables", action="store_false", dest="tables",
-                        help="Не обрабатывать таблицы Excel/CSV")
-    parser.set_defaults(images=CFG["IMAGE_ENABLED"],
-                        text=CFG["TEXT_ENABLED"],
-                        tables=CFG["TABLE_ENABLED"])
+                         help="Не обрабатывать таблицы Excel/CSV")
+    parser.set_defaults(
+        images=os.getenv("IMAGE_ENABLED", "true").lower() == "true",
+        text=os.getenv("TEXT_ENABLED", "true").lower() == "true",
+        tables=os.getenv("TABLE_ENABLED", "true").lower() == "true",
+    )
 
-    # Параметры обработки
-    parser.add_argument("--max-rows", type=int, default=CFG["MAX_TABLE_ROWS"],
-                        help="Макс. строк из Excel в Markdown (default: 50)")
-    parser.add_argument("--page-limit", type=int, default=CFG["PDF_PAGE_LIMIT"],
-                        help="Макс. страниц PDF (0 = все, default: 0)")
-    parser.add_argument("--vision-model", default=CFG["VISION_MODEL"],
-                        help="Модель для Vision API (default: qwen2.5-vl:7b)")
-    parser.add_argument("--ollama-host", default=CFG["VISION_OLLAMA_HOST"],
-                        help="Ollama host (default: http://localhost:11434)")
-    parser.add_argument("--vision-provider", default="ollama",
-                        choices=["ollama", "deepseek", "vk", "yandex"],
-                        help="Провайдер Vision API (default: ollama)")
-    parser.add_argument("--corpus-builder", default=CFG["CORPUS_BUILDER"],
-                        choices=["repomix", "yek"],
-                        help="Корпусный строитель (default: repomix)")
-    parser.add_argument("--vision-deepseek-key", default=CFG["VISION_DEEPSEEK_API_KEY"],
-                        help="API ключ для Deepseek Vision")
-    parser.add_argument("--vision-vk-key", default=CFG["VISION_VK_API_KEY"],
-                        help="API ключ для VK Vision")
-    parser.add_argument("--vision-yandex-key", default=CFG["VISION_YANDEX_CLOUD_API_KEY"],
-                        help="API ключ для Yandex Cloud Vision")
+    parser.add_argument("--max-rows", type=int, default=int(os.getenv("MAX_TABLE_ROWS", "50")),
+                         help="Макс. строк из Excel в Markdown (default: 50)")
+    parser.add_argument("--page-limit", type=int, default=int(os.getenv("PDF_PAGE_LIMIT", "0")),
+                         help="Макс. страниц PDF (0 = все, default: 0)")
+    parser.add_argument("--vision-model", default=os.getenv("VISION_MODEL", "qwen2.5-vl:7b"),
+                         help="Модель для Vision API (default: qwen2.5-vl:7b)")
+    parser.add_argument("--ollama-host", default=os.getenv("VISION_OLLAMA_HOST", "http://localhost:11434"),
+                         help="Ollama host (default: http://localhost:11434)")
+    parser.add_argument("--vision-provider", default=os.getenv("VISION_PROVIDER", "ollama"),
+                         choices=["ollama", "deepseek", "vk", "yandex"],
+                         help="Провайдер Vision API (default: ollama)")
+    parser.add_argument("--corpus-builder", default=os.getenv("CORPUS_BUILDER", "repomix"),
+                         choices=["repomix", "yek"],
+                         help="Корпусный строитель (default: repomix)")
+    parser.add_argument("--vision-deepseek-key", default=os.getenv("VISION_DEEPSEEK_API_KEY", ""),
+                         help="API ключ для Deepseek Vision")
+    parser.add_argument("--vision-vk-key", default=os.getenv("VISION_VK_API_KEY", ""),
+                         help="API ключ для VK Vision")
+    parser.add_argument("--vision-yandex-key", default=os.getenv("VISION_YANDEX_CLOUD_API_KEY", ""),
+                         help="API ключ для Yandex Cloud Vision")
 
-    # Вывод
-    parser.add_argument("--include-stats", action="store_true", default=CFG["INCLUDE_STATS"],
-                        help="Добавлять статистику для таблиц")
+    parser.add_argument("--include-stats", action="store_true",
+                         default=os.getenv("INCLUDE_STATS", "true").lower() == "true",
+                         help="Добавлять статистику для таблиц")
     parser.add_argument("--no-stats", action="store_false", dest="include_stats",
-                        help="Не добавлять статистику")
+                         help="Не добавлять статистику")
     parser.add_argument("--include-key-metrics", action="store_true",
-                        default=CFG["INCLUDE_KEY_METRICS"],
-                        help="Извлекать ключевые метрики")
-    parser.add_argument("--no-key-metrics", action="store_false",
-                        dest="include_key_metrics",
-                        help="Не извлекать ключевые метрики")
-    parser.add_argument("--verbose", "-v", action="store_true", default=CFG["VERBOSE"],
-                        help="Подробный вывод")
+                         default=os.getenv("INCLUDE_KEY_METRICS", "true").lower() == "true",
+                         help="Извлекать ключевые метрики")
+    parser.add_argument("--no-key-metrics", action="store_false", dest="include_key_metrics",
+                         help="Не извлекать ключевые метрики")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                         default=os.getenv("VERBOSE", "false").lower() == "true",
+                         help="Подробный вывод")
+
+    # Новые параметры
+    parser.add_argument("--workers", type=int, default=int(os.getenv("WORKERS", "4")),
+                         help="Число потоков для параллельной обработки (default: 4)")
+    parser.add_argument("--max-file-size-mb", type=float, default=float(os.getenv("MAX_FILE_SIZE_MB", "200")),
+                         help="Пропускать файлы больше указанного размера в МБ (default: 200)")
+    parser.add_argument("--dry-run", action="store_true",
+                         help="Показать, что будет обработано, без записи файлов")
+    parser.add_argument("--cache-file", default=os.getenv("VISION_CACHE_FILE", ""),
+                         help="Путь к файлу кеша описаний изображений "
+                              "(default: <output>/.data2md_vision_cache.json)")
+    parser.add_argument("--no-cache", action="store_true",
+                         help="Отключить кеширование описаний изображений")
+    parser.add_argument("--summary-json", default="",
+                         help="Сохранить машиночитаемый отчёт о прогоне в JSON")
+    parser.add_argument("--log-dir", default=os.getenv("LOG_DIR", "logs"),
+                         help="Папка для лог-файлов прогонов (default: logs)")
+    parser.add_argument("--no-log", action="store_true",
+                         help="Не писать лог-файл прогона")
+    parser.add_argument("--version", action="version", version=f"data2md {VERSION}")
 
     return parser.parse_args(argv)
 
 
-def main():
-    args = parse_args()
+def build_config(args: argparse.Namespace) -> Config:
+    return Config(
+        input_dir=Path(args.input),
+        output_dir=Path(args.output),
+        corpus_builder=args.corpus_builder,
+        ext_include=[x.strip().lower() for x in args.ext_include.split(",") if x.strip()],
+        ext_exclude=[x.strip().lower() for x in args.ext_exclude.split(",") if x.strip()],
+        images_enabled=args.images,
+        text_enabled=args.text,
+        tables_enabled=args.tables,
+        max_table_rows=args.max_rows,
+        pdf_page_limit=args.page_limit,
+        vision_provider=args.vision_provider,
+        vision_model=args.vision_model,
+        ollama_host=args.ollama_host,
+        vision_keys={
+            "deepseek": args.vision_deepseek_key,
+            "vk": args.vision_vk_key,
+            "yandex": args.vision_yandex_key,
+        },
+        include_stats=args.include_stats,
+        include_key_metrics=args.include_key_metrics,
+        verbose=args.verbose,
+        workers=max(1, args.workers),
+        max_file_size_mb=args.max_file_size_mb,
+        dry_run=args.dry_run,
+        cache_path=None if args.no_cache else Path(
+            args.cache_file or (Path(args.output) / ".data2md_vision_cache.json")
+        ),
+        summary_json=Path(args.summary_json) if args.summary_json else None,
+        log_dir=Path(args.log_dir),
+        file_log_enabled=not args.no_log,
+    )
 
-    # Собираем конфиг из аргументов
-    cfg = {
-        "INPUT_DIR": args.input,
-        "OUTPUT_DIR": args.output,
-        "CORPUS_BUILDER": args.corpus_builder,
-        "EXTENSIONS_INCLUDE": args.ext_include,
-        "EXTENSIONS_EXCLUDE": args.ext_exclude,
-        "IMAGE_ENABLED": args.images,
-        "TEXT_ENABLED": args.text,
-        "TABLE_ENABLED": args.tables,
-        "MAX_TABLE_ROWS": args.max_rows,
-        "PDF_PAGE_LIMIT": args.page_limit,
-        "VISION_MODEL": args.vision_model,
-        "VISION_OLLAMA_HOST": args.ollama_host,
-        "VISION_PROVIDER": args.vision_provider,
-        "VISION_DEEPSEEK_API_KEY": args.vision_deepseek_key,
-        "VISION_VK_API_KEY": args.vision_vk_key,
-        "VISION_YANDEX_CLOUD_API_KEY": args.vision_yandex_key,
-        "INCLUDE_STATS": args.include_stats,
-        "INCLUDE_KEY_METRICS": args.include_key_metrics,
-        "VERBOSE": args.verbose,
-    }
 
-    # Проверка путей
-    input_dir = Path(cfg["INPUT_DIR"])
-    output_dir = Path(cfg["OUTPUT_DIR"])
+def setup_logging(verbose: bool) -> None:
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(message)s",
+        stream=sys.stdout,
+    )
 
-    if not input_dir.exists():
-        print(f"X Ошибка: входная директория не найдена: {input_dir}")
-        sys.exit(1)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+def main(argv=None) -> int:
+    run_start = datetime.now()
+    run_start_perf = time.perf_counter()
 
-    # Сбор файлов
-    all_files = []
-    for f in input_dir.rglob("*"):
-        if f.is_file() and _should_process(str(f), cfg):
-            all_files.append(f)
+    args = parse_args(argv)
+    setup_logging(args.verbose)
+    cfg = build_config(args)
+
+    if not cfg.input_dir.exists():
+        logger.error(f"X Ошибка: входная директория не найдена: {cfg.input_dir}")
+        return 1
+
+    try:
+        cfg.input_dir.resolve().relative_to(cfg.output_dir.resolve())
+        logger.error("X Ошибка: выходная директория не должна быть родительской для входной")
+        return 1
+    except ValueError:
+        pass  # это нормальный случай — input не внутри output
+
+    if not cfg.dry_run:
+        cfg.output_dir.mkdir(parents=True, exist_ok=True)
+
+    all_files = sorted(f for f in cfg.input_dir.rglob("*") if f.is_file() and cfg.should_process(f))
 
     if not all_files:
-        print(f"X Нет файлов для обработки в {input_dir}")
-        sys.exit(0)
+        logger.info(f"X Нет файлов для обработки в {cfg.input_dir}")
+        return 0
 
-    # Обработка
-    stats = {"image": 0, "text": 0, "tabular": 0, "skipped": 0}
-    for f in sorted(all_files):
-        try:
-            ext = f.suffix.lower()
-            ftype = EXT_MAP.get(ext, "unknown")
+    if cfg.vision_provider != "ollama" and cfg.vision_provider in HTTP_VISION_PROVIDERS \
+            and not cfg.vision_keys.get(cfg.vision_provider):
+        logger.warning(
+            f"! Провайдер '{cfg.vision_provider}' выбран, но ключ API не задан — "
+            f"изображения получат только fallback-описание по имени файла."
+        )
 
-            if cfg["VERBOSE"]:
-                print(f"  -> {f.name} ({ftype})")
+    cache = VisionCache(cfg.cache_path)
 
-            md_content = _process_file(str(f), cfg)
+    logger.info(f"Найдено файлов: {len(all_files)}. Потоков: {cfg.workers}.")
 
-            # Сохраняем
-            out_name = f.stem + ".md"
-            out_path = output_dir / out_name
+    results: list[FileResult] = []
+    progress = tqdm(total=len(all_files), disable=tqdm is None or cfg.verbose, unit="файл")
 
-            # Если конфликт имён — добавляем префикс
-            counter = 1
-            while out_path.exists():
-                out_path = output_dir / f"{f.stem}_{counter}.md"
-                counter += 1
+    with ThreadPoolExecutor(max_workers=cfg.workers) as pool:
+        futures = {pool.submit(_handle_one, f, cfg, cache): f for f in all_files}
+        for future in as_completed(futures):
+            result = future.result()
+            results.append(result)
+            if cfg.verbose:
+                status = "V" if result.ok else "X"
+                extra = result.skipped_reason or result.error or ""
+                logger.debug(f"  {status} {result.path.name} {extra}")
+            if tqdm is not None:
+                progress.update(1)
+    if tqdm is not None:
+        progress.close()
 
-            with open(out_path, "w", encoding="utf-8") as out:
-                out.write(md_content)
-
-            if cfg["VERBOSE"]:
-                print(f"    V {out_path.name}")
-
-            if ftype in stats:
-                stats[ftype] += 1
-            else:
-                stats["skipped"] += 1
-
-        except Exception as e:
-            print(f"  X {f.name}: {e}")
+    stats = {"image": 0, "text": 0, "tabular": 0, "unknown": 0, "skipped": 0, "errors": 0}
+    for r in results:
+        if r.skipped_reason:
             stats["skipped"] += 1
+        elif not r.ok:
+            stats["errors"] += 1
+        else:
+            stats[r.ftype] = stats.get(r.ftype, 0) + 1
 
-    # Итог
-    print(f"\n=== Готово ===")
-    print(f"  Изображений: {stats['image']}")
-    print(f"  Текстов/PDF: {stats['text']}")
-    print(f"  Таблиц:      {stats['tabular']}")
-    print(f"  Пропущено:   {stats['skipped']}")
-    print(f"  Всего:       {len(all_files)}")
-    print(f"  Результат:       {output_dir.resolve()}")
-    
-    # Выбор корпусного строителя
-    builder = cfg.get("CORPUS_BUILDER", "repomix")
-    if builder == "repomix":
-        print(f"\nДалее: repomix --input {output_dir} --output corpus.txt")
-    elif builder == "yek":
-        print(f"\nДалее: yek --input {output_dir} --output corpus.txt")
+    logger.info("\n=== Готово ===")
+    logger.info(f"  Изображений: {stats['image']}")
+    logger.info(f"  Текстов/PDF: {stats['text']}")
+    logger.info(f"  Таблиц:      {stats['tabular']}")
+    logger.info(f"  Пропущено:   {stats['skipped']}")
+    logger.info(f"  Ошибок:      {stats['errors']}")
+    logger.info(f"  Всего:       {len(all_files)}")
+    if not cfg.dry_run:
+        logger.info(f"  Результат:   {cfg.output_dir.resolve()}")
+
+    if cfg.summary_json:
+        summary = {
+            "version": VERSION,
+            "input_dir": str(cfg.input_dir.resolve()),
+            "output_dir": str(cfg.output_dir.resolve()),
+            "dry_run": cfg.dry_run,
+            "stats": stats,
+            "files": [
+                {
+                    "path": str(r.path),
+                    "type": r.ftype,
+                    "ok": r.ok,
+                    "output": str(r.out_path) if r.out_path else None,
+                    "error": r.error,
+                    "skipped_reason": r.skipped_reason,
+                }
+                for r in results
+            ],
+        }
+        cfg.summary_json.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(f"  Отчёт:       {cfg.summary_json.resolve()}")
+
+    if cfg.file_log_enabled:
+        duration_sec = time.perf_counter() - run_start_perf
+        run_logger = RunLogger(cfg.log_dir, run_start)
+        log_path = run_logger.write(cfg, results, duration_sec)
+        logger.info(f"  Лог:         {log_path.resolve()}")
+
+    if cfg.dry_run:
+        logger.info("\n(dry-run — файлы не записывались)")
     else:
-        print(f"\nДалее: corpus builder '{builder}' --input {output_dir} --output corpus.txt")
+        builder = cfg.corpus_builder
+        logger.info(f"\nДалее: {builder} --input {cfg.output_dir} --output corpus.txt")
+
+    return 1 if stats["errors"] and stats["errors"] == len(all_files) else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
