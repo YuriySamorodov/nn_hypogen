@@ -134,6 +134,25 @@ def main() -> None:
     st.set_page_config(page_title="Hypothesis Factory", layout="wide")
     st.title("Hypothesis Factory for Flotation Tailings")
 
+    with st.expander("Как пользоваться (быстрый старт)", expanded=False):
+        st.markdown(
+            "**Что это.** Исследовательский ассистент по корпусу научных статей о флотации/"
+            "хвостах/металлургии: задаёшь вопрос — система ищет по корпусу (Qdrant + граф знаний), "
+            "при необходимости добирает свежие источники из веба (GLM web search + OpenAlex) и "
+            "пишет ответ со **ссылками на источники [n]**.\n\n"
+            "**3 вкладки:**\n"
+            "- **Deep Research** — задай вопрос → «Исследовать». Ансамбль DeepSeek+GLM: GLM планирует "
+            "под-запросы, обе модели пишут черновики, GLM-судья сводит финальный отчёт с цитатами. "
+            "Галка «Веб-поиск» добавляет внешние источники, когда в корпусе данных не хватает.\n"
+            "- **Hypotheses** — генерация гипотез под KPI (параметры в сайдбаре слева).\n"
+            "- **Materials KG** — прямой поиск по графу знаний и evidence.\n\n"
+            "**API (для интеграций).** Тот же движок доступен по HTTP: "
+            "`POST /research` и `POST /research/ensemble`, заголовок `X-API-Key: <ключ>`, "
+            "тело `{\"question\": \"...\", \"web\": true}`. Проверка живости: `GET /health`.\n\n"
+            "_Публичные ссылки на UI и API временные (trycloudflare) и меняются при перезапуске — "
+            "актуальные спрашивай у владельца стенда._"
+        )
+
     research_tab, hypothesis_tab, kg_tab = st.tabs(["Deep Research", "Hypotheses", "Materials KG"])
 
     with research_tab:
