@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.chainlit/
+.env
+.history/
+logs/*.log
+!logs/.gitkeep
+exports/*
+!exports/.gitkeep
+
+# Материалы задания — не в репозитории (большие бинарники, LFS).
+# Положите папку локально из архива конкурса, см. README.
+Задача 1/

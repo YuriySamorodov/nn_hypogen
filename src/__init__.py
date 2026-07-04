@@ -1,0 +1,2 @@
+"""Hypothesis Factory RAG prototype."""
+
