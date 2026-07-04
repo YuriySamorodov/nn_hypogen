@@ -23,6 +23,7 @@
   - [Веб-аугментация](#веб-аугментация)
   - [HTTP API](#http-api)
   - [Streamlit UI](#streamlit-ui)
+    - [Демо-видео](#демо-видео)
   - [Быстрый старт](#быстрый-старт)
   - [Внешний доступ (публичные ссылки)](#внешний-доступ-публичные-ссылки)
   - [Конфигурация (.env)](#конфигурация-env)
@@ -216,7 +217,9 @@ curl -s http://<host>:8800/research/ensemble \
 
 Наверху - свёрнутый блок «Как пользоваться (быстрый старт)».
 
-[🎥 Демо-видео на YouTube](https://youtu.be/wrLRQyRTaVk)
+### Демо-видео
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/wrLRQyRTaVk" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 
 ---
 
