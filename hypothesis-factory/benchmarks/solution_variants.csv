@@ -1,0 +1,19 @@
+id,name,description,components,interpretability,evidence_grounding,domain_fit,modernity_2026,local_runnability,implementation_risk,estimated_score
+v18,Full KG Vector Factory,Vector KG retrieval + metadata filters + agentic review + transparent scoring.,"['KG embeddings', 'Qdrant', 'Metadata filters', 'Agents', 'Scoring']",0.96,0.95,0.94,0.96,0.74,0.34,0.8230000000000001
+v15,Recommended hybrid factory,RAG + KG + numeric priority + multi-agent critique + expert feedback + optional LLM.,"['Hybrid RAG', 'KG', 'Scoring', 'Agents', 'Feedback']",0.94,0.9,0.92,0.95,0.78,0.32,0.8082
+v17,Metadata-filtered Vector RAG,Vector retrieval plus plant/element/size metadata filters.,"['KG embeddings', 'Metadata filters', 'Qdrant']",0.92,0.93,0.9,0.9,0.78,0.36,0.7958
+v16,Vector KG RAG,KG embeddings ledger with vector evidence retrieval.,"['KG embeddings', 'Vector RAG', 'Scoring']",0.9,0.9,0.86,0.88,0.82,0.34,0.7796
+v07,RAG + KG + transparent scoring,"Граф, evidence и прозрачная weighted scoring формула.","['RAG', 'KG', 'Scoring']",0.9,0.85,0.85,0.78,0.82,0.28,0.7572000000000001
+v06,RAG + Knowledge Graph,Evidence chunks и PSP/KPI-граф без предиктивной модели.,"['RAG', 'NetworkX KG']",0.82,0.78,0.78,0.75,0.8,0.35,0.6965999999999999
+v10,Multi-agent RAG + KG,"Agents, RAG, KG, но без явного numeric priority.","['Agents', 'RAG', 'KG']",0.84,0.82,0.78,0.92,0.55,0.52,0.6900000000000001
+v11,Physics + process heuristics,Правила флотации/крупности без LLM.,"['Rules', 'Excel parser']",0.88,0.65,0.8,0.55,0.95,0.25,0.6836000000000001
+v05,RAG + numeric Excel priority,RAG плюс ранжирование по тоннажу потерь из Excel.,"['RAG', 'Excel parser', 'Scoring']",0.7,0.78,0.75,0.65,0.85,0.3,0.6596
+v09,Multi-agent RAG,Co-Scientist style debate поверх RAG.,"['Agents', 'RAG', 'LLM']",0.7,0.78,0.7,0.9,0.55,0.55,0.6275999999999999
+v13,Digital twin first,Полный цифровой двойник фабрики.,"['Simulator', 'ML', 'APC']",0.8,0.7,0.9,0.95,0.2,0.85,0.617
+v04,Hybrid RAG,BM25 + dense retrieval + JSON hypothesis prompt.,"['BM25', 'Embeddings', 'LLM']",0.5,0.7,0.55,0.65,0.75,0.4,0.534
+v14,Computer vision froth control,CV по пене и online setpoints.,"['CV', 'APC', 'ML']",0.65,0.55,0.72,0.85,0.35,0.75,0.5234000000000001
+v08,Multi-agent only,"Генератор, критик и ранжировщик без структурных данных.","['Agents', 'LLM']",0.5,0.45,0.5,0.82,0.55,0.65,0.44780000000000003
+v02,Keyword RAG only,Поиск по документам и генерация ответа без графа и scoring.,"['BM25', 'LLM']",0.35,0.55,0.45,0.45,0.85,0.45,0.42600000000000005
+v03,Dense RAG only,Embedding retrieval без учета точных классов крупности.,"['Embeddings', 'LLM']",0.35,0.5,0.4,0.55,0.7,0.45,0.4
+v12,Predictive ML only,Модель извлечения по историческим данным без объяснения.,['ML'],0.35,0.35,0.45,0.7,0.65,0.65,0.377
+v01,Single LLM chatbot,Один prompt без RAG и числовых проверок.,['LLM'],0.15,0.1,0.25,0.45,0.9,0.8,0.21700000000000003

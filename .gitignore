@@ -1,0 +1,40 @@
+# --- secrets (NEVER commit) ---
+**/.env
+.env
+.rag_api_key
+*.key
+*_api_key
+**/credentials*.json
+
+# --- large / proprietary data (not for public repo) ---
+Задача 1/
+hypothesis-factory/backups/
+hypothesis-factory/data/
+hypothesis-factory/logs/
+logs/
+reports/
+/opt/data/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- node ---
+node_modules/
+
+# --- editor / tooling ---
+.history/
+.cursor/
+.idea/
+.vscode/
+*.log
+
+# --- os ---
+.DS_Store
+Thumbs.db

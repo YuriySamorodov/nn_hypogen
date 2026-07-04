@@ -1,0 +1,308 @@
+{
+  "iterations_per_variant": 100,
+  "total_iterations": 1800,
+  "final_ranking": [
+    {
+      "rank": 1,
+      "id": "v18",
+      "name": "Full KG Vector Factory",
+      "initial_score": 0.823,
+      "final_score": 0.875108,
+      "score_gain": 0.052108,
+      "components": [
+        "KG embeddings",
+        "Qdrant",
+        "Metadata filters",
+        "Agents",
+        "Scoring",
+        "Local fallback",
+        "Numeric priority",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 2,
+      "id": "v15",
+      "name": "Recommended hybrid factory",
+      "initial_score": 0.8082,
+      "final_score": 0.865795,
+      "score_gain": 0.057595,
+      "components": [
+        "Hybrid RAG",
+        "KG",
+        "Scoring",
+        "Agents",
+        "Feedback",
+        "Local fallback",
+        "Numeric priority",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 3,
+      "id": "v17",
+      "name": "Metadata-filtered Vector RAG",
+      "initial_score": 0.7958,
+      "final_score": 0.856317,
+      "score_gain": 0.060517,
+      "components": [
+        "KG embeddings",
+        "Metadata filters",
+        "Qdrant",
+        "Local fallback",
+        "Numeric priority",
+        "KG causal edges",
+        "Agentic critique",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 4,
+      "id": "v16",
+      "name": "Vector KG RAG",
+      "initial_score": 0.7796,
+      "final_score": 0.848643,
+      "score_gain": 0.069043,
+      "components": [
+        "KG embeddings",
+        "Vector RAG",
+        "Scoring",
+        "Numeric priority",
+        "Local fallback",
+        "KG causal edges",
+        "Agentic critique",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 5,
+      "id": "v07",
+      "name": "RAG + KG + transparent scoring",
+      "initial_score": 0.7572,
+      "final_score": 0.839418,
+      "score_gain": 0.082218,
+      "components": [
+        "RAG",
+        "KG",
+        "Scoring",
+        "Numeric priority",
+        "Agentic critique",
+        "Local fallback",
+        "KG causal edges",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 6,
+      "id": "v11",
+      "name": "Physics + process heuristics",
+      "initial_score": 0.6836,
+      "final_score": 0.82468,
+      "score_gain": 0.14108,
+      "components": [
+        "Rules",
+        "Excel parser",
+        "Agentic critique",
+        "Numeric priority",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 7,
+      "id": "v10",
+      "name": "Multi-agent RAG + KG",
+      "initial_score": 0.69,
+      "final_score": 0.811989,
+      "score_gain": 0.121989,
+      "components": [
+        "Agents",
+        "RAG",
+        "KG",
+        "Numeric priority",
+        "Local fallback",
+        "Provenance",
+        "KG causal edges"
+      ]
+    },
+    {
+      "rank": 8,
+      "id": "v06",
+      "name": "RAG + Knowledge Graph",
+      "initial_score": 0.6966,
+      "final_score": 0.811673,
+      "score_gain": 0.115073,
+      "components": [
+        "RAG",
+        "NetworkX KG",
+        "Numeric priority",
+        "KG causal edges",
+        "Agentic critique",
+        "Provenance",
+        "Local fallback"
+      ]
+    },
+    {
+      "rank": 9,
+      "id": "v05",
+      "name": "RAG + numeric Excel priority",
+      "initial_score": 0.6596,
+      "final_score": 0.802299,
+      "score_gain": 0.142699,
+      "components": [
+        "RAG",
+        "Excel parser",
+        "Scoring",
+        "KG causal edges",
+        "Numeric priority",
+        "Agentic critique",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 10,
+      "id": "v13",
+      "name": "Digital twin first",
+      "initial_score": 0.617,
+      "final_score": 0.786043,
+      "score_gain": 0.169043,
+      "components": [
+        "Simulator",
+        "ML",
+        "APC",
+        "Local fallback",
+        "Provenance",
+        "Numeric priority"
+      ]
+    },
+    {
+      "rank": 11,
+      "id": "v09",
+      "name": "Multi-agent RAG",
+      "initial_score": 0.6276,
+      "final_score": 0.783371,
+      "score_gain": 0.155771,
+      "components": [
+        "Agents",
+        "RAG",
+        "LLM",
+        "Numeric priority",
+        "Local fallback",
+        "KG causal edges",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 12,
+      "id": "v04",
+      "name": "Hybrid RAG",
+      "initial_score": 0.534,
+      "final_score": 0.752428,
+      "score_gain": 0.218428,
+      "components": [
+        "BM25",
+        "Embeddings",
+        "LLM",
+        "Numeric priority",
+        "KG causal edges",
+        "Provenance",
+        "Agentic critique",
+        "Local fallback"
+      ]
+    },
+    {
+      "rank": 13,
+      "id": "v14",
+      "name": "Computer vision froth control",
+      "initial_score": 0.5234,
+      "final_score": 0.732276,
+      "score_gain": 0.208876,
+      "components": [
+        "CV",
+        "APC",
+        "ML",
+        "Numeric priority",
+        "Provenance",
+        "Local fallback",
+        "KG causal edges"
+      ]
+    },
+    {
+      "rank": 14,
+      "id": "v02",
+      "name": "Keyword RAG only",
+      "initial_score": 0.426,
+      "final_score": 0.716688,
+      "score_gain": 0.290688,
+      "components": [
+        "BM25",
+        "LLM",
+        "Numeric priority",
+        "KG causal edges",
+        "Agentic critique",
+        "Provenance"
+      ]
+    },
+    {
+      "rank": 15,
+      "id": "v08",
+      "name": "Multi-agent only",
+      "initial_score": 0.4478,
+      "final_score": 0.711648,
+      "score_gain": 0.263848,
+      "components": [
+        "Agents",
+        "LLM",
+        "Numeric priority",
+        "Provenance",
+        "KG causal edges",
+        "Local fallback"
+      ]
+    },
+    {
+      "rank": 16,
+      "id": "v03",
+      "name": "Dense RAG only",
+      "initial_score": 0.4,
+      "final_score": 0.700104,
+      "score_gain": 0.300104,
+      "components": [
+        "Embeddings",
+        "LLM",
+        "Numeric priority",
+        "KG causal edges",
+        "Provenance",
+        "Agentic critique"
+      ]
+    },
+    {
+      "rank": 17,
+      "id": "v12",
+      "name": "Predictive ML only",
+      "initial_score": 0.377,
+      "final_score": 0.686897,
+      "score_gain": 0.309897,
+      "components": [
+        "ML",
+        "Numeric priority",
+        "KG causal edges",
+        "Provenance",
+        "Local fallback"
+      ]
+    },
+    {
+      "rank": 18,
+      "id": "v01",
+      "name": "Single LLM chatbot",
+      "initial_score": 0.217,
+      "final_score": 0.639314,
+      "score_gain": 0.422314,
+      "components": [
+        "LLM",
+        "Numeric priority",
+        "KG causal edges",
+        "Provenance",
+        "Agentic critique"
+      ]
+    }
+  ]
+}

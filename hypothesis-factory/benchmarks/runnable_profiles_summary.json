@@ -1,0 +1,652 @@
+{
+  "data_dir": "../Задача 1",
+  "from_db": true,
+  "run_id": "latest",
+  "documents": 1907,
+  "chunks": 17067,
+  "profiles": [
+    {
+      "profile_id": "v17",
+      "profile_name": "Metadata-filtered Vector RAG",
+      "retrieval_mode": "auto",
+      "hypotheses": 6,
+      "avg_final_score": 0.784815,
+      "evidence_coverage": 1.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.0,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.333333,
+      "runtime_seconds": 3.105252,
+      "quality_score": 0.648778
+    },
+    {
+      "profile_id": "v16",
+      "profile_name": "Vector KG RAG",
+      "retrieval_mode": "kg",
+      "hypotheses": 6,
+      "avg_final_score": 0.783445,
+      "evidence_coverage": 1.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.0,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.333333,
+      "runtime_seconds": 3.117923,
+      "quality_score": 0.648367
+    },
+    {
+      "profile_id": "v18",
+      "profile_name": "Full KG Vector Factory",
+      "retrieval_mode": "auto",
+      "hypotheses": 3,
+      "avg_final_score": 0.768445,
+      "evidence_coverage": 1.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.0,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.166667,
+      "runtime_seconds": 0.272418,
+      "quality_score": 0.6272
+    },
+    {
+      "profile_id": "v02",
+      "profile_name": "Keyword RAG only",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 6,
+      "avg_final_score": 0.641947,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 1.0,
+      "runtime_seconds": 0.64434,
+      "quality_score": 0.512584
+    },
+    {
+      "profile_id": "v14",
+      "profile_name": "Computer vision froth control",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 6,
+      "avg_final_score": 0.641947,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 1.0,
+      "runtime_seconds": 0.689526,
+      "quality_score": 0.512584
+    },
+    {
+      "profile_id": "v03",
+      "profile_name": "Dense RAG only",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 6,
+      "avg_final_score": 0.641947,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.857143,
+      "runtime_seconds": 0.685759,
+      "quality_score": 0.498298
+    },
+    {
+      "profile_id": "v04",
+      "profile_name": "Hybrid RAG",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 6,
+      "avg_final_score": 0.665632,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.75,
+      "runtime_seconds": 0.683724,
+      "quality_score": 0.494689
+    },
+    {
+      "profile_id": "v07",
+      "profile_name": "RAG + KG + transparent scoring",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 6,
+      "avg_final_score": 0.665632,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.5,
+      "runtime_seconds": 0.609558,
+      "quality_score": 0.469689
+    },
+    {
+      "profile_id": "v05",
+      "profile_name": "RAG + numeric Excel priority",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 5,
+      "avg_final_score": 0.655179,
+      "evidence_coverage": 0.4,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.6,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.5,
+      "runtime_seconds": 0.645587,
+      "quality_score": 0.462554
+    },
+    {
+      "profile_id": "v09",
+      "profile_name": "Multi-agent RAG",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 3,
+      "avg_final_score": 0.646263,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.3,
+      "runtime_seconds": 0.636497,
+      "quality_score": 0.443879
+    },
+    {
+      "profile_id": "v01",
+      "profile_name": "Single LLM chatbot",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 5,
+      "avg_final_score": 0.703684,
+      "evidence_coverage": 0.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 1.0,
+      "runtime_seconds": 0.633981,
+      "quality_score": 0.431105
+    },
+    {
+      "profile_id": "v15",
+      "profile_name": "Recommended hybrid factory",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 3,
+      "avg_final_score": 0.646263,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 0.666667,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.166667,
+      "runtime_seconds": 0.678996,
+      "quality_score": 0.430546
+    },
+    {
+      "profile_id": "v08",
+      "profile_name": "Multi-agent only",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 3,
+      "avg_final_score": 0.622579,
+      "evidence_coverage": 0.333333,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.333333,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.375,
+      "runtime_seconds": 0.64285,
+      "quality_score": 0.424274
+    },
+    {
+      "profile_id": "v11",
+      "profile_name": "Physics + process heuristics",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 1,
+      "avg_final_score": 0.727778,
+      "evidence_coverage": 0.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.1,
+      "runtime_seconds": 0.624272,
+      "quality_score": 0.348333
+    },
+    {
+      "profile_id": "v13",
+      "profile_name": "Digital twin first",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 1,
+      "avg_final_score": 0.717895,
+      "evidence_coverage": 0.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.125,
+      "runtime_seconds": 0.682308,
+      "quality_score": 0.347868
+    },
+    {
+      "profile_id": "v06",
+      "profile_name": "RAG + Knowledge Graph",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 1,
+      "avg_final_score": 0.717895,
+      "evidence_coverage": 0.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.1,
+      "runtime_seconds": 0.667796,
+      "quality_score": 0.345368
+    },
+    {
+      "profile_id": "v10",
+      "profile_name": "Multi-agent RAG + KG",
+      "retrieval_mode": "tfidf",
+      "hypotheses": 1,
+      "avg_final_score": 0.717895,
+      "evidence_coverage": 0.0,
+      "causal_coverage": 1.0,
+      "warning_rate": 1.0,
+      "generator_diversity": 0.166667,
+      "corpus_use": 0.0,
+      "hypothesis_breadth": 0.083333,
+      "runtime_seconds": 0.620937,
+      "quality_score": 0.343702
+    },
+    {
+      "profile_id": "v12",
+      "profile_name": "Predictive ML only",
+      "hypotheses": 0,
+      "runtime_seconds": 0.638332,
+      "quality_score": 0.0
+    }
+  ],
+  "examples": {
+    "v01": [
+      {
+        "rank": 1,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v02": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v03": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v04": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v05": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "Тонкое грохочение после второй стадии измельчения",
+        "generator": "expert_seed",
+        "score": 0.661053,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v06": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v07": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v08": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 2,
+        "title": "Тонкое грохочение после второй стадии измельчения",
+        "generator": "expert_seed",
+        "score": 0.661053,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 3,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.488789,
+        "evidence": 1,
+        "warnings": 1
+      }
+    ],
+    "v09": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 2,
+        "title": "Тонкое грохочение после второй стадии измельчения",
+        "generator": "expert_seed",
+        "score": 0.661053,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 3,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.559842,
+        "evidence": 4,
+        "warnings": 0
+      }
+    ],
+    "v10": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 2
+      }
+    ],
+    "v11": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.727778,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v12": [],
+    "v13": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v14": [
+      {
+        "rank": 1,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 2,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.732105,
+        "evidence": 0,
+        "warnings": 1
+      },
+      {
+        "rank": 3,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 1
+      }
+    ],
+    "v15": [
+      {
+        "rank": 1,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.717895,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 2,
+        "title": "Тонкое грохочение после второй стадии измельчения",
+        "generator": "expert_seed",
+        "score": 0.661053,
+        "evidence": 0,
+        "warnings": 2
+      },
+      {
+        "rank": 3,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.559842,
+        "evidence": 4,
+        "warnings": 0
+      }
+    ],
+    "v16": [
+      {
+        "rank": 1,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.828077,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 2,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.827513,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 3,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.825539,
+        "evidence": 4,
+        "warnings": 0
+      }
+    ],
+    "v17": [
+      {
+        "rank": 1,
+        "title": "Автоматизация подачи воды в мельницы",
+        "generator": "expert_seed",
+        "score": 0.829764,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 2,
+        "title": "Перераспределение фронта контрольной флотации",
+        "generator": "expert_seed",
+        "score": 0.829186,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 3,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.827163,
+        "evidence": 4,
+        "warnings": 0
+      }
+    ],
+    "v18": [
+      {
+        "rank": 1,
+        "title": "Настройка песковых насадок гидроциклонов",
+        "generator": "expert_seed",
+        "score": 0.836765,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 2,
+        "title": "A/B-карта плотности пульпы и времени агитации",
+        "generator": "counterfactual",
+        "score": 0.826658,
+        "evidence": 4,
+        "warnings": 0
+      },
+      {
+        "rank": 3,
+        "title": "Тонкое грохочение после второй стадии измельчения",
+        "generator": "expert_seed",
+        "score": 0.641914,
+        "evidence": 4,
+        "warnings": 0
+      }
+    ]
+  }
+}
