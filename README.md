@@ -1,5 +1,3 @@
-# nn_hypogen
-=======
 # Hypothesis Factory — Deep Research по обогащению руды
 
 Интерпретируемая R&D-платформа для задачи Норникеля: **снизить потери Ni/Cu в отвальных хвостах флотации**. Система превращает разрозненный научный корпус (PDF-статьи, металлургические БД, веб) в проверяемые, подкреплённые источниками ответы и гипотезы.
@@ -89,13 +87,13 @@ flowchart TB
 
 **Сервисы (docker-compose):**
 
-| Сервис | Образ | Роль | Порт (host) |
-|---|---|---|---|
-| `postgres` | postgres:16-alpine | ledger/провенанс, source of truth | 55432 |
-| `neo4j` | neo4j:5-community (+GDS) | граф сущностей/связей | 57474 / 57687 |
-| `qdrant` | qdrant/qdrant:v1.12.6 | вектор-индекс чанков | 56333 / 56334 |
-| `grobid` | lfoppiano/grobid:0.8.0 | TEI-парсинг научных PDF | 58070 |
-| `hypothesis-factory` | build ./hypothesis-factory | код: воркеры, API, UI | 58501 (UI) |
+| Сервис           | Образ                 | Роль                                   | Порт (host) |
+| ---------------------- | -------------------------- | ------------------------------------------ | --------------- |
+| `postgres`           | postgres:16-alpine         | ledger/провенанс, source of truth | 55432           |
+| `neo4j`              | neo4j:5-community (+GDS)   | граф сущностей/связей   | 57474 / 57687   |
+| `qdrant`             | qdrant/qdrant:v1.12.6      | вектор-индекс чанков     | 56333 / 56334   |
+| `grobid`             | lfoppiano/grobid:0.8.0     | TEI-парсинг научных PDF      | 58070           |
+| `hypothesis-factory` | build ./hypothesis-factory | код: воркеры, API, UI            | 58501 (UI)      |
 
 `hypothesis-factory` монтирует `backend/` и `app/` как volumes — код правится без пересборки образа. API (8800) слушает внутри docker-сети и пробрасывается наружу туннелем.
 
@@ -185,12 +183,12 @@ flowchart LR
 
 Zero-dependency `ThreadingHTTPServer` (stdlib) — переживает пересборку образа через смонтированный код. Запуск: `python -m backend.api_server --host 0.0.0.0 --port 8800`.
 
-| Метод | Путь | Назначение |
-|---|---|---|
-| GET | `/health` | статус + провайдеры LLM + веб-бэкенды |
-| GET | `/runs` | доступные корпуса (с флагом qdrant_ready) |
-| POST | `/research` | одиночный Deep Research |
-| POST | `/research/ensemble` | ансамбль DeepSeek + GLM |
+| Метод | Путь               | Назначение                                             |
+| ---------- | ---------------------- | ---------------------------------------------------------------- |
+| GET        | `/health`            | статус + провайдеры LLM + веб-бэкенды  |
+| GET        | `/runs`              | доступные корпуса (с флагом qdrant_ready) |
+| POST       | `/research`          | одиночный Deep Research                                 |
+| POST       | `/research/ensemble` | ансамбль DeepSeek + GLM                                  |
 
 **Тело POST:** `{question, run_id?, mode?, top_k?, max_subqueries?, max_context?, web?, web_max?, web_backends?}`
 
@@ -270,17 +268,17 @@ grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' logs/cloudflared_*.log
 
 Копируй `hypothesis-factory/.env.example` → `.env`. Ключевые переменные:
 
-| Переменная | Смысл | Дефолт |
-|---|---|---|
-| `HF_MOCK_LLM` | 1 = не звать реальные LLM | `1` |
-| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL_*` | DeepSeek для черновиков | — / `deepseek-v4-pro`,`-flash` |
-| `GLM_API_KEY`/`ZAI_API_KEY`, `GLM_MODEL`, `GLM_REASONING_EFFORT` | GLM-5.2: план/судья/веб | `glm-5.2`, `high` |
-| `HF_WEB_SEARCH`, `HF_WEB_SEARCH_BACKENDS`, `GLM_WEB_SEARCH_ENGINE` | веб-аугментация | `1`, `glm,openalex`, `search_prime` |
-| `HF_API_KEY` | ключ доступа к HTTP API | пусто = открыто |
-| `HF_OCR_ENGINE`, `HF_OCR_GPU` | движок OCR и GPU | `easyocr`/`tesseract`, `1` |
-| `CORPUS_DATABASE_URL` | Postgres DSN (иначе SQLite) | из compose |
-| `NEO4J_URI/USER/PASSWORD`, `QDRANT_URL`, `GROBID_URL` | derived-индексы | из compose |
-| `HF_KG_EMBEDDING_MODEL/DIMENSIONS` | эмбеддер | `local-hashing-384` / `384` |
+| Переменная                                                     | Смысл                               | Дефолт                              |
+| ------------------------------------------------------------------------ | ---------------------------------------- | ----------------------------------------- |
+| `HF_MOCK_LLM`                                                          | 1 = не звать реальные LLM | `1`                                     |
+| `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL_*`                              | DeepSeek для черновиков     | — /`deepseek-v4-pro`,`-flash`        |
+| `GLM_API_KEY`/`ZAI_API_KEY`, `GLM_MODEL`, `GLM_REASONING_EFFORT` | GLM-5.2: план/судья/веб      | `glm-5.2`, `high`                     |
+| `HF_WEB_SEARCH`, `HF_WEB_SEARCH_BACKENDS`, `GLM_WEB_SEARCH_ENGINE` | веб-аугментация            | `1`, `glm,openalex`, `search_prime` |
+| `HF_API_KEY`                                                           | ключ доступа к HTTP API      | пусто = открыто               |
+| `HF_OCR_ENGINE`, `HF_OCR_GPU`                                        | движок OCR и GPU                  | `easyocr`/`tesseract`, `1`          |
+| `CORPUS_DATABASE_URL`                                                  | Postgres DSN (иначе SQLite)         | из compose                              |
+| `NEO4J_URI/USER/PASSWORD`, `QDRANT_URL`, `GROBID_URL`              | derived-индексы                   | из compose                              |
+| `HF_KG_EMBEDDING_MODEL/DIMENSIONS`                                     | эмбеддер                         | `local-hashing-384` / `384`           |
 
 Реальный `.env` и `.rag_api_key` **не коммитятся** (в `.gitignore`).
 
