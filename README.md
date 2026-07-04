@@ -217,19 +217,11 @@ curl -s http://<host>:8800/research/ensemble \
 
 Наверху - свёрнутый блок «Как пользоваться (быстрый старт)».
 
-### Демо-видео
+### Демо
 
-<div align="center">
-  <iframe 
-    width="720" 
-    height="405" 
-    src="https://www.youtube.com/embed/wrLRQyRTaVk" 
-    frameborder="0" 
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-    allowfullscreen
-    style="max-width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-  </iframe>
-</div>
+https://github.com/user-attachments/assets/fbe50cba-7c73-438e-a29f-ce5fb1226c65
+
+
 
 **Демонстрация работы системы**
 
