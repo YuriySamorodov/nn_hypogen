@@ -1,0 +1,93 @@
+name: hacknor-hypothesis
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hacknor-postgres
+    environment:
+      POSTGRES_DB: hypothesis_factory
+      POSTGRES_USER: hypothesis
+      POSTGRES_PASSWORD: hypothesis
+    ports:
+      - "55432:5432"
+    volumes:
+      - hacknor_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hypothesis -d hypothesis_factory"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: hacknor-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/hypothesiskg
+      NEO4J_PLUGINS: '["graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: gds.*
+      NEO4J_dbms_security_procedures_allowlist: gds.*
+    ports:
+      - "57474:7474"
+      - "57687:7687"
+    volumes:
+      - hacknor_neo4j_data:/data
+      - hacknor_neo4j_logs:/logs
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p hypothesiskg 'RETURN 1' >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.6
+    container_name: hacknor-qdrant
+    ports:
+      - "56333:6333"
+      - "56334:6334"
+    volumes:
+      - hacknor_qdrant_data:/qdrant/storage
+
+  grobid:
+    image: lfoppiano/grobid:0.8.0
+    container_name: hacknor-grobid
+    ports:
+      - "58070:8070"
+
+  hypothesis-factory:
+    build:
+      context: ./hypothesis-factory
+    container_name: hacknor-hypothesis-factory
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: ./hypothesis-factory/.env
+        required: false
+    environment:
+      CORPUS_DATABASE_URL: postgresql://hypothesis:hypothesis@postgres:5432/hypothesis_factory
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: hypothesiskg
+      QDRANT_URL: http://qdrant:6333
+      GROBID_URL: http://grobid:8070
+      HF_MOCK_LLM: "1"
+      HF_CHUNK_SIZE_CHARS: ${HF_CHUNK_SIZE_CHARS:-1800}
+      HF_CHUNK_OVERLAP_CHARS: ${HF_CHUNK_OVERLAP_CHARS:-250}
+    working_dir: /app
+    volumes:
+      - ./Задача 1:/workspace/Задача 1:ro
+      - ./hypothesis-factory/data:/app/data
+      - /media/andy/XS2000/data_hack:/data_hack
+    command: ["sleep", "infinity"]
+
+volumes:
+  hacknor_postgres_data:
+  hacknor_neo4j_data:
+  hacknor_neo4j_logs:
+  hacknor_qdrant_data:
+
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.31.240.0/24
